@@ -3,6 +3,9 @@ import os
 from eth_utils.crypto import CRYPTO_TYPE_GM, CRYPTO_TYPE_ECDSA, set_crypto_type
 
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
 class ClientConfig:
     def __init__(self):
         # 加密类型
@@ -16,7 +19,7 @@ class ClientConfig:
         self.ssl = False
         
         # 账户信息
-        self.account_keyfile_path = "python-sdk/bin/accounts"  # 保存keystore文件的路径
+        self.account_keyfile_path = os.path.join(BASE_DIR, "python-sdk", "bin", "accounts")  # 保存keystore文件的路径
         self.account_keyfile = "pyaccount.keystore"
         self.account = "default"
         self.password = "123456"
@@ -28,12 +31,12 @@ class ClientConfig:
         self.contract_abi_path = ""
         self.contract_bin_path = ""
         self.contract_address = ""
-        self.contract_dir = "./contracts"
-        self.contract_info_file = "bin/contract.ini"  # 保存已部署合约信息的文件
+        self.contract_dir = os.path.join(BASE_DIR, "contracts")
+        self.contract_info_file = os.path.join(BASE_DIR, "python-sdk", "bin", "contract.ini")  # 保存已部署合约信息的文件
         
         # 日志配置
         self.log_level = "info"
-        self.logdir = "logs"
+        self.logdir = os.path.join(BASE_DIR, "logs")
         
         # 协议配置
         self.PROTOCOL_RPC = "rpc"

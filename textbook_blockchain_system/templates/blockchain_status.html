@@ -1,248 +1,115 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>区块链状态 - 教材交易区块链系统</title>
-    <link rel="stylesheet" href="/static/dist/css/blockchainStatus.css">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        header {
-            background-color: #4CAF50;
-            color: white;
-            padding: 20px;
-            text-align: center;
-        }
-        nav {
-            background-color: #333;
-            overflow: hidden;
-        }
-        nav a {
-            float: left;
-            display: block;
-            color: white;
-            text-align: center;
-            padding: 14px 16px;
-            text-decoration: none;
-        }
-        nav a:hover {
-            background-color: #ddd;
-            color: black;
-        }
-        .card {
-            background-color: white;
-            padding: 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h2 {
-            color: #333;
-        }
-        h3 {
-            color: #555;
-            margin-top: 20px;
-        }
-        p {
-            line-height: 1.6;
-        }
-        .status-indicator {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-        .status-valid {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        .status-invalid {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        .block-item {
-            background-color: #f9f9f9;
-            padding: 15px;
-            margin: 10px 0;
-            border-left: 4px solid #4CAF50;
-            border-radius: 4px;
-        }
-        .block-item h4 {
-            margin-top: 0;
-            color: #333;
-        }
-        .block-info {
-            font-size: 14px;
-            color: #666;
-            margin: 5px 0;
-        }
-        .transaction-list {
-            margin-top: 10px;
-            padding-left: 20px;
-        }
-        .transaction-item {
-            margin: 5px 0;
-            padding: 5px;
-            background-color: #f0f0f0;
-            border-radius: 3px;
-        }
-        .pager {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 14px;
-        }
-        .pager a {
-            display: inline-block;
-            padding: 8px 12px;
-            border-radius: 4px;
-            background: #333;
-            color: #fff;
-            text-decoration: none;
-        }
-        .pager a:hover { background: #222; }
-        .pager .disabled {
-            opacity: 0.5;
-            pointer-events: none;
-        }
-        .back-link {
-            display: inline-block;
-            margin-top: 20px;
-            color: #333;
-            text-decoration: none;
-        }
-        .back-link:hover {
-            text-decoration: underline;
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>教材交易区块链系统</h1>
-        <p>基于区块链技术的教材交易管理平台</p>
-    </header>
-    
-    <nav>
-        <a href="/">首页</a>
-        <a href="/dashboard">我的后台</a>
-        <a href="/textbook/register">教材注册</a>
-        <a href="/transaction/initiate">发起交易</a>
-        <a href="/transaction/confirm">确认交易</a>
-        <a href="/textbook/search">教材查询</a>
-        <a href="/blockchain/status">区块链状态</a>
-        {% if session.get('user_id') %}
-            <a href="/auth/logout">退出</a>
-        {% else %}
-            <a href="/auth/login">登录</a>
-        {% endif %}
-    </nav>
-    
-    <div class="container">
-        <script type="application/json" id="__INITIAL_STATE__">
-            {{ {
-                'chain': chain,
-                'chain_length': chain_length,
-                'is_valid': is_valid,
-                'page': page,
-                'total_pages': total_pages,
-            } | tojson }}
-        </script>
-        <div id="blockchain-status-app"></div>
-
-        <div class="card" id="blockchain-status-legacy">
-            <h2>区块链状态</h2>
-            <div class="info-item">
-                <strong>区块数量：</strong>{{ chain_length }}
+{% extends "base.html" %}
+{% block title %}区块链状态{% endblock %}
+{% block page_title %}区块链状态{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>⛓️ 区块链状态</h2>
+    </div>
+    <div class="card-body">
+        <div class="stats-grid" style="margin-bottom:20px;">
+            <div class="stat-card">
+                <div class="stat-icon blue">📦</div>
+                <div class="stat-label">区块数量</div>
+                <div class="stat-value">{{ chain_length }}</div>
             </div>
-            <div class="info-item">
-                <strong>区块链有效性：</strong>
-                <span class="status-indicator 
-                    {% if is_valid %}status-valid{% else %}status-invalid{% endif %}">
+            <div class="stat-card">
+                <div class="stat-icon {% if is_valid %}green{% else %}red{% endif %}">
+                    {% if is_valid %}🟢{% else %}🔴{% endif %}
+                </div>
+                <div class="stat-label">区块链有效性</div>
+                <div class="stat-value">
                     {% if is_valid %}有效{% else %}无效{% endif %}
-                </span>
+                </div>
+                <div class="stat-desc">
+                    {% if is_valid %}区块链数据完整，未被篡改{% else %}区块链数据异常{% endif %}
+                </div>
             </div>
-            
-            <h3>区块详情</h3>
-            <div class="pager">
-                <a class="{% if page <= 1 %}disabled{% endif %}" href="/blockchain/status?page={{ page - 1 }}">上一页</a>
-                <div>第 {{ page }} / {{ total_pages }} 页</div>
-                <a class="{% if page >= total_pages %}disabled{% endif %}" href="/blockchain/status?page={{ page + 1 }}">下一页</a>
-            </div>
-            {% if chain %}
-                {% for block in chain %}
-                <div class="block-item">
-                    <h4>区块 #{{ block.index }}</h4>
-                    <div class="block-info">
-                        <strong>时间戳：</strong>{{ block.timestamp }}<br>
-                        <strong>前一区块哈希：</strong>{{ block.previous_hash }}<br>
-                        <strong>当前区块哈希：</strong>{{ block.hash }}<br>
-                        <strong>交易数量：</strong>{{ block.transactions|length }}
-                    </div>
-                    
-                    {% if block.transactions %}
-                    <div class="transaction-list">
-                        <strong>交易：</strong>
+        </div>
+
+        <div class="pager">
+            <a class="btn btn-sm btn-secondary {% if page <= 1 %}disabled" style="opacity:0.4;pointer-events:none;"{% else %}"{% endif %} href="/blockchain/status?page={{ page - 1 }}">← 上一页</a>
+            <span class="page-info">第 {{ page }} / {{ total_pages }} 页</span>
+            <a class="btn btn-sm btn-secondary {% if page >= total_pages %}disabled" style="opacity:0.4;pointer-events:none;"{% else %}"{% endif %} href="/blockchain/status?page={{ page + 1 }}">下一页 →</a>
+        </div>
+
+        {% if chain %}
+            {% for block in chain %}
+            <div class="block-item">
+                <h4>⛓️ 区块 #{{ block.index }}</h4>
+                <div class="block-info">
+                    <strong>时间戳：</strong>{{ block.timestamp }}<br>
+                    <strong>前一区块哈希：</strong><span class="mono">{{ block.previous_hash }}</span><br>
+                    <strong>当前区块哈希：</strong><span class="mono">{{ block.hash }}</span><br>
+                    <strong>交易数量：</strong>{{ block.transactions|length }}
+                </div>
+
+                {% if block.transactions %}
+                <div style="margin-top:12px;">
+                    <strong style="font-size:13px;">交易列表</strong>
+                    <ul class="tx-list">
                         {% for tx in block.transactions %}
-                        <div class="transaction-item">
-                            {% if tx.type %}
-                            <strong>类型：</strong>{{ tx.type }}<br>
-                            {% endif %}
+                        <li class="tx-item">
+                            <div class="tx-header">
+                                <span class="tx-type">
+                                    {% if tx.type == '教材注册' %}📖{% elif tx.type == '交易发起' %}🤝{% elif tx.type == '交易确认' %}✅{% else %}📋{% endif %}
+                                    {{ tx.type }}
+                                </span>
+                                {% if tx.status %}
+                                <span class="badge
+                                    {% if tx.status == 'completed' or tx.status == 'available' %}badge-green
+                                    {% elif tx.status == 'pending' %}badge-yellow
+                                    {% elif tx.status == 'rejected' %}badge-red
+                                    {% else %}badge-gray{% endif %}
+                                ">{{ tx.status }}</span>
+                                {% endif %}
+                            </div>
                             {% if tx.textbook_description %}
-                            <strong>教材：</strong>{{ tx.textbook_description }}<br>
+                            <div>📖 教材：{{ tx.textbook_description }}</div>
                             {% endif %}
                             {% if tx.textbook_id %}
-                            <strong>教材ID：</strong>{{ tx.textbook_id }}<br>
+                            <div>🆔 教材ID：{{ tx.textbook_id }}</div>
                             {% endif %}
                             {% if tx.isbn %}
-                            <strong>ISBN：</strong>{{ tx.isbn }}<br>
+                            <div>📌 ISBN：{{ tx.isbn }}</div>
                             {% endif %}
                             {% if tx.version %}
-                            <strong>版本：</strong>{{ tx.version }}<br>
+                            <div>📌 版本：{{ tx.version }}</div>
                             {% endif %}
                             {% if tx.condition %}
-                            <strong>品相：</strong>{{ tx.condition }}<br>
+                            <div>📌 品相：{{ tx.condition }}</div>
+                            {% endif %}
+                            {% if tx.seller_name %}
+                            <div>👤 卖家：{{ tx.seller_name }}</div>
                             {% endif %}
                             {% if tx.buyer_name %}
-                            <strong>买家：</strong>{{ tx.buyer_name }}<br>
+                            <div>👤 买家：{{ tx.buyer_name }}</div>
                             {% endif %}
                             {% if tx.offer_price %}
-                            <strong>{{ tx.price_label or '金额' }}：</strong>{{ tx.offer_price }} 元<br>
+                            <div>💰 {{ tx.price_label or '金额' }}：{{ tx.offer_price }} 元</div>
                             {% endif %}
-                            {% if tx.status %}
-                            <strong>状态：</strong>{{ tx.status }}<br>
-                            {% endif %}
-                            <strong>交易哈希：</strong>{{ tx.hash }}<br>
-                        </div>
+                            <div style="margin-top:4px;font-size:11px;color:var(--text-muted);word-break:break-all;">
+                                交易哈希：{{ tx.hash }}
+                            </div>
+                        </li>
                         {% endfor %}
-                    </div>
-                    {% endif %}
+                    </ul>
                 </div>
-                {% endfor %}
-            {% else %}
-                <p>区块链为空</p>
-            {% endif %}
-
-            <div class="pager">
-                <a class="{% if page <= 1 %}disabled{% endif %}" href="/blockchain/status?page={{ page - 1 }}">上一页</a>
-                <div>第 {{ page }} / {{ total_pages }} 页</div>
-                <a class="{% if page >= total_pages %}disabled{% endif %}" href="/blockchain/status?page={{ page + 1 }}">下一页</a>
+                {% endif %}
             </div>
-            
-            <a href="/" class="back-link">← 返回首页</a>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <div class="empty-icon">⛓️</div>
+                <p>区块链为空</p>
+            </div>
+        {% endif %}
+
+        <div class="pager">
+            <a class="btn btn-sm btn-secondary {% if page <= 1 %}disabled" style="opacity:0.4;pointer-events:none;"{% else %}"{% endif %} href="/blockchain/status?page={{ page - 1 }}">← 上一页</a>
+            <span class="page-info">第 {{ page }} / {{ total_pages }} 页</span>
+            <a class="btn btn-sm btn-secondary {% if page >= total_pages %}disabled" style="opacity:0.4;pointer-events:none;"{% else %}"{% endif %} href="/blockchain/status?page={{ page + 1 }}">下一页 →</a>
         </div>
     </div>
-
-    <script type="module" src="/static/dist/js/blockchainStatus.js"></script>
-</body>
-</html>
+</div>
+{% endblock %}

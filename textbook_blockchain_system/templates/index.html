@@ -1,119 +1,82 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>教材交易区块链系统</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        header {
-            background-color: #4CAF50;
-            color: white;
-            padding: 20px;
-            text-align: center;
-        }
-        nav {
-            background-color: #333;
-            overflow: hidden;
-        }
-        nav a {
-            float: left;
-            display: block;
-            color: white;
-            text-align: center;
-            padding: 14px 16px;
-            text-decoration: none;
-        }
-        nav a:hover {
-            background-color: #ddd;
-            color: black;
-        }
-        .card {
-            background-color: white;
-            padding: 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h2 {
-            color: #333;
-        }
-        p {
-            line-height: 1.6;
-        }
-        .btn {
-            display: inline-block;
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            text-decoration: none;
-            border-radius: 4px;
-            margin: 10px 0;
-        }
-        .btn:hover {
-            background-color: #45a049;
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>教材交易区块链系统</h1>
-        <p>基于区块链技术的教材交易管理平台</p>
-    </header>
-    
-    <nav>
-        <a href="/">首页</a>
-        <a href="/dashboard">我的后台</a>
-        <a href="/textbook/register">教材注册</a>
-        <a href="/transaction/initiate">发起交易</a>
-        <a href="/transaction/confirm">确认交易</a>
-        <a href="/textbook/search">教材查询</a>
-        <a href="/blockchain/status">区块链状态</a>
-        {% if session.get('user_id') %}
-            <a href="/auth/logout">退出</a>
-        {% else %}
-            <a href="/auth/login">登录</a>
-        {% endif %}
-    </nav>
-    
-    <div class="container">
-        <div class="card">
-            <h2>系统功能</h2>
-            <p>本系统基于区块链技术，实现了教材交易的全流程管理，包括教材信息上链、交易发起与确认等核心功能。</p>
-            <ul>
-                <li><strong>教材信息上链</strong>：录入ISBN、版本、品相、初始定价等信息</li>
-                <li><strong>交易发起</strong>：买方提交购买请求</li>
-                <li><strong>交易确认</strong>：卖方核实收款后更新交易状态为"完成"</li>
-                <li><strong>链上链下数据协同</strong>：核心数据上链，辅助信息存储在SQLite数据库</li>
-            </ul>
-        </div>
-        
-        <div class="card">
-            <h2>快速开始</h2>
-            <a href="/textbook/register" class="btn">注册新教材</a>
-            <a href="/transaction/initiate" class="btn">发起交易</a>
-            <a href="/blockchain/status" class="btn">查看区块链状态</a>
-        </div>
-        
-        <div class="card">
-            <h2>系统特点</h2>
-            <ul>
-                <li>数据不可篡改：基于区块链技术确保交易数据安全</li>
-                <li>交易透明：完整的交易历史可追溯</li>
-                <li>存储高效：核心数据上链，辅助信息存储在数据库</li>
-                <li>操作简便：直观的网页界面，易于使用</li>
-            </ul>
+{% extends "base.html" %}
+{% block title %}首页{% endblock %}
+{% block page_title %}系统概览{% endblock %}
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">📖</div>
+        <div class="stat-label">核心功能</div>
+        <div class="stat-value">教材上链</div>
+        <div class="stat-desc">区块链存证 · 不可篡改</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">🤝</div>
+        <div class="stat-label">交易模式</div>
+        <div class="stat-value">发起 → 确认</div>
+        <div class="stat-desc">买方发起 · 卖方确认</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">⛓️</div>
+        <div class="stat-label">数据架构</div>
+        <div class="stat-value">链上 + 链下</div>
+        <div class="stat-desc">核心上链 · 辅助存储</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon amber">🔒</div>
+        <div class="stat-label">安全保障</div>
+        <div class="stat-value">数据可信</div>
+        <div class="stat-desc">交易透明 · 全程追溯</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>系统功能</h2>
+    </div>
+    <div class="card-body">
+        <p style="margin-bottom:16px;color:var(--text-secondary);">本系统基于区块链技术，实现了教材交易的全流程管理，包括教材信息上链、交易发起与确认等核心功能。</p>
+        <div class="grid-3">
+            <div class="item">
+                <div class="item-title">📖 教材信息上链</div>
+                <div class="item-meta">录入 ISBN、版本、品相、初始定价等信息</div>
+            </div>
+            <div class="item">
+                <div class="item-title">🤝 交易发起</div>
+                <div class="item-meta">买方提交购买请求</div>
+            </div>
+            <div class="item">
+                <div class="item-title">✅ 交易确认</div>
+                <div class="item-meta">卖方核实后更新交易状态为"完成"</div>
+            </div>
+            <div class="item">
+                <div class="item-title">⛓️ 链上链下协同</div>
+                <div class="item-meta">核心数据上链，辅助信息存储在数据库</div>
+            </div>
+            <div class="item">
+                <div class="item-title">🔍 全程追溯</div>
+                <div class="item-meta">完整的交易历史可查询追溯</div>
+            </div>
+            <div class="item">
+                <div class="item-title">🔒 数据不可篡改</div>
+                <div class="item-meta">基于区块链技术确保交易数据安全</div>
+            </div>
         </div>
     </div>
-</body>
-</html>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>快速开始</h2>
+    </div>
+    <div class="card-body">
+        <div class="btn-group">
+            <a href="/textbook/register" class="btn btn-primary">📖 注册新教材</a>
+            <a href="/transaction/initiate" class="btn btn-primary">🤝 发起交易</a>
+            <a href="/blockchain/status" class="btn btn-secondary">⛓️ 查看区块链状态</a>
+            {% if not session.get('user_id') %}
+            <a href="/auth/login" class="btn btn-secondary">🔑 登录系统</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

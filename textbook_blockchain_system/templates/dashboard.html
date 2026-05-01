@@ -1,172 +1,166 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的后台 - 教材交易区块链系统</title>
-    <link rel="stylesheet" href="/static/dist/css/dashboard.css">
-    <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5; }
-        header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
-        nav { background-color: #333; overflow: hidden; }
-        nav a { float: left; display: block; color: white; text-align: center; padding: 14px 16px; text-decoration: none; }
-        nav a:hover { background-color: #ddd; color: black; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        .card { background-color: white; padding: 20px; margin: 20px 0; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .item { background: #f9f9f9; padding: 12px; border-radius: 4px; border-left: 4px solid #4CAF50; }
-        .mono { font-family: monospace; background: #f0f0f0; padding: 2px 6px; border-radius: 3px; }
-        .btn { display: inline-block; background-color: #4CAF50; color: white; padding: 8px 14px; text-decoration: none; border-radius: 4px; border: none; cursor: pointer; }
-        .btn:hover { background-color: #45a049; }
-        .btn-secondary { background-color: #333; }
-        .btn-secondary:hover { background-color: #222; }
-        .btn-danger { background-color: #dc3545; }
-        .btn-danger:hover { background-color: #b52a37; }
-        .small { font-size: 13px; color: #666; }
-        form { margin: 0; }
-        .row { margin-top: 8px; }
-        img { max-width: 160px; max-height: 160px; border: 1px solid #ddd; padding: 4px; background: white; }
-    </style>
-    <script>
-        function copyTextToClipboard(text) {
-            navigator.clipboard.writeText(text)
-                .then(() => alert('复制成功！'))
-                .catch(() => alert('复制失败，请手动复制'));
-        }
-    </script>
-</head>
-<body>
-    <header>
-        <h1>教材交易区块链系统</h1>
-        <p>我的后台（{{ session.get('user_name') or session.get('user_id') }}）</p>
-    </header>
+{% extends "base.html" %}
+{% block title %}我的后台{% endblock %}
+{% block page_title %}我的后台{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>👤 我的账号</h2>
+    </div>
+    <div class="card-body">
+        <div class="info-grid">
+            <span class="label">用户 ID</span>
+            <span class="value">
+                <span class="mono" id="userId">{{ session.get('user_id') }}</span>
+                <button class="btn-copy" onclick="copyTextFromId('userId')">📋 复制</button>
+            </span>
+            <span class="label">用户名</span>
+            <span class="value">{{ session.get('user_name', '用户') }}</span>
+        </div>
+    </div>
+</div>
 
-    <nav>
-        <a href="/">首页</a>
-        <a href="/dashboard">我的后台</a>
-        <a href="/textbook/register">教材注册</a>
-        <a href="/transaction/initiate">发起交易</a>
-        <a href="/textbook/search">教材查询</a>
-        <a href="/blockchain/status">区块链状态</a>
-        <a href="/auth/logout">退出</a>
-    </nav>
+{% set tb_count = textbooks|length %}
+{% set pending_count = pending_transactions|length %}
+{% set buyer_count = buyer_transactions|length %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">📖</div>
+        <div class="stat-label">我发布的教材</div>
+        <div class="stat-value">{{ tb_count }}</div>
+        <div class="stat-desc">共发布 {{ tb_count }} 本教材</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon amber">⏳</div>
+        <div class="stat-label">待确认交易</div>
+        <div class="stat-value">{{ pending_count }}</div>
+        <div class="stat-desc">等待卖家确认</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon cyan">📋</div>
+        <div class="stat-label">我发起的交易</div>
+        <div class="stat-value">{{ buyer_count }}</div>
+        <div class="stat-desc">作为买方的交易记录</div>
+    </div>
+</div>
 
-    <div class="container">
-        <script type="application/json" id="__INITIAL_STATE__">
-            {{ {
-                'user': {'id': session.get('user_id'), 'name': session.get('user_name')},
-                'textbooks': textbooks,
-                'pending_transactions': pending_transactions,
-                'buyer_transactions': buyer_transactions,
-            } | tojson }}
-        </script>
-        <div id="dashboard-app"></div>
-
-        <div id="dashboard-legacy">
-            <div class="card">
-                <h2>我的账号</h2>
-                <div><strong>用户ID：</strong><span class="mono" id="userId">{{ session.get('user_id') }}</span>
-                    <button class="btn btn-secondary" type="button" onclick="copyTextToClipboard('{{ session.get('user_id') }}')">复制</button>
+<div class="grid-2">
+    <div class="card">
+        <div class="card-header">
+            <h2>📖 我发布的教材</h2>
+            <a class="btn btn-primary btn-sm" href="/textbook/register">+ 发布新教材</a>
+        </div>
+        <div class="card-body">
+            {% if textbooks %}
+                {% for tb in textbooks %}
+                <div class="item">
+                    <div class="item-title">教材ID <span class="mono">{{ tb.textbook_id }}</span></div>
+                    <div class="item-meta">创建时间：{{ tb.created_at }}</div>
+                    <div class="item-meta">位置：{{ tb.location or '无' }}</div>
+                    <div class="item-meta">描述：{{ tb.description or '无' }}</div>
+                    {% if tb.photos %}
+                        {% set photos = tb.photos.split(',') %}
+                        <div class="photo-grid">
+                            {% for photo in photos %}
+                                {% if photo %}
+                                <img src="/uploads/{{ photo }}" alt="教材照片">
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="item-actions">
+                        <a class="btn btn-secondary btn-sm" href="/textbook/{{ tb.textbook_id }}">查看详情</a>
+                    </div>
                 </div>
-                <div class="small">该ID用于在链下数据库中标识买家/卖家。</div>
-            </div>
-
-            <div class="grid">
-            <div class="card">
-                <h2>我发布的教材</h2>
-                <div class="row">
-                    <a class="btn" href="/textbook/register">发布新教材</a>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">
+                    <div class="empty-icon">📖</div>
+                    <p>还没有发布任何教材</p>
+                    <a class="btn btn-primary btn-sm" href="/textbook/register" style="margin-top:12px;">发布第一本教材</a>
                 </div>
-
-                {% if textbooks %}
-                    {% for tb in textbooks %}
-                        <div class="item">
-                            <div><strong>教材ID：</strong><span class="mono">{{ tb.textbook_id }}</span></div>
-                            <div class="small">创建时间：{{ tb.created_at }}</div>
-                            <div><strong>位置：</strong>{{ tb.location or '无' }}</div>
-                            <div><strong>描述：</strong>{{ tb.description or '无' }}</div>
-                            {% if tb.photos %}
-                                {% set photos = tb.photos.split(',') %}
-                                <div class="row">
-                                    {% for photo in photos %}
-                                        {% if photo %}
-                                            <img src="/uploads/{{ photo }}" alt="教材照片">
-                                        {% endif %}
-                                    {% endfor %}
-                                </div>
-                            {% endif %}
-                            <div class="row">
-                                <a class="btn btn-secondary" href="/textbook/{{ tb.textbook_id }}">查看详情</a>
-                            </div>
-                        </div>
-                    {% endfor %}
-                {% else %}
-                    <p>暂无发布记录</p>
-                {% endif %}
-            </div>
-
-            <div class="card">
-                <h2>待确认交易</h2>
-                <p class="small">只显示你作为卖家、状态为 pending 的交易</p>
-
-                {% if pending_transactions %}
-                    {% for tx in pending_transactions %}
-                        <div class="item">
-                            <div><strong>交易ID：</strong><span class="mono">{{ tx.transaction_id }}</span></div>
-                            <div><strong>教材：</strong>{{ tx.textbook_description or '无' }}</div>
-                            <div><strong>教材ID：</strong><span class="mono">{{ tx.textbook_id }}</span></div>
-                            <div><strong>买家：</strong>{{ tx.buyer_name or '未知' }}（{{ tx.buyer_contact or '无' }}）</div>
-                            <div><strong>报价：</strong>{{ tx.offer_price }} 元</div>
-                            <div><strong>状态：</strong>{{ tx.status }}</div>
-                            <div class="small">链上交易哈希：{{ tx.blockchain_hash or '无' }}</div>
-                            <div class="row">
-                                <form method="POST" action="/transaction/confirm">
-                                    <input type="hidden" name="textbook_id" value="{{ tx.textbook_id }}">
-                                    <input type="hidden" name="transaction_id" value="{{ tx.transaction_id }}">
-                                    <button class="btn" type="submit">确认交易</button>
-                                </form>
-                                <form method="POST" action="/transaction/reject" style="display:inline-block; margin-left:10px;">
-                                    <input type="hidden" name="textbook_id" value="{{ tx.textbook_id }}">
-                                    <input type="hidden" name="transaction_id" value="{{ tx.transaction_id }}">
-                                    <button class="btn btn-danger" type="submit">拒绝</button>
-                                </form>
-                            </div>
-                        </div>
-                    {% endfor %}
-                {% else %}
-                    <p>暂无待确认交易</p>
-                {% endif %}
-            </div>
-
-            <div class="card">
-                <h2>我发起的交易（买家）</h2>
-                <p class="small">显示你作为买家发起的交易记录（pending / completed / rejected）</p>
-
-                {% if buyer_transactions %}
-                    {% for tx in buyer_transactions %}
-                        <div class="item">
-                            <div><strong>交易ID：</strong><span class="mono">{{ tx.transaction_id }}</span></div>
-                            <div><strong>教材：</strong>{{ tx.textbook_description or '无' }}</div>
-                            <div><strong>教材ID：</strong><span class="mono">{{ tx.textbook_id }}</span></div>
-                            <div><strong>报价：</strong>{{ tx.offer_price }} 元</div>
-                            <div><strong>状态：</strong>{{ tx.status }}</div>
-                            <div class="small">创建：{{ tx.created_at }}{% if tx.updated_at %}，更新：{{ tx.updated_at }}{% endif %}</div>
-                            {% if tx.seller_name or tx.seller_contact %}
-                                <div class="small">卖家：{{ tx.seller_name or '未知' }}（{{ tx.seller_contact or '无' }}）</div>
-                            {% endif %}
-                            <div class="row">
-                                <a class="btn btn-secondary" href="/textbook/{{ tx.textbook_id }}">查看教材详情</a>
-                            </div>
-                        </div>
-                    {% endfor %}
-                {% else %}
-                    <p>暂无交易记录</p>
-                {% endif %}
-            </div>
-            </div>
+            {% endif %}
         </div>
     </div>
 
-    <script type="module" src="/static/dist/js/dashboard.js"></script>
-</body>
-</html>
+    <div>
+        <div class="card">
+            <div class="card-header">
+                <h2>⏳ 待确认交易</h2>
+                <span class="badge badge-yellow">作为卖家</span>
+            </div>
+            <div class="card-body">
+                {% if pending_transactions %}
+                    {% for tx in pending_transactions %}
+                    <div class="item">
+                        <div class="item-title">交易ID <span class="mono">{{ tx.transaction_id }}</span></div>
+                        <div class="item-meta">教材：{{ tx.textbook_description or '无' }}（<span class="mono">{{ tx.textbook_id }}</span>）</div>
+                        <div class="item-meta">买家：{{ tx.buyer_name or '未知' }}（{{ tx.buyer_contact or '无' }}）</div>
+                        <div class="item-meta">报价：<strong>{{ tx.offer_price }} 元</strong></div>
+                        <div class="item-meta">状态：<span class="badge badge-yellow">{{ tx.status }}</span></div>
+                        <div class="item-actions">
+                            <form method="POST" action="/transaction/confirm" style="display:inline;">
+                                <input type="hidden" name="textbook_id" value="{{ tx.textbook_id }}">
+                                <input type="hidden" name="transaction_id" value="{{ tx.transaction_id }}">
+                                <button class="btn btn-success btn-sm" type="submit">✅ 确认交易</button>
+                            </form>
+                            <form method="POST" action="/transaction/reject" style="display:inline;">
+                                <input type="hidden" name="textbook_id" value="{{ tx.textbook_id }}">
+                                <input type="hidden" name="transaction_id" value="{{ tx.transaction_id }}">
+                                <button class="btn btn-danger btn-sm" type="submit">✕ 拒绝</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <div class="empty-icon">✅</div>
+                        <p>暂无待确认交易</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>📋 我发起的交易</h2>
+                <span class="badge badge-blue">作为买家</span>
+            </div>
+            <div class="card-body">
+                {% if buyer_transactions %}
+                    {% for tx in buyer_transactions %}
+                    <div class="item">
+                        <div class="item-title">交易ID <span class="mono">{{ tx.transaction_id }}</span></div>
+                        <div class="item-meta">教材：{{ tx.textbook_description or '无' }}（<span class="mono">{{ tx.textbook_id }}</span>）</div>
+                        <div class="item-meta">报价：<strong>{{ tx.offer_price }} 元</strong></div>
+                        <div class="item-meta">
+                            状态：
+                            {% if tx.status == 'completed' %}
+                                <span class="badge badge-green">{{ tx.status }}</span>
+                            {% elif tx.status == 'pending' %}
+                                <span class="badge badge-yellow">{{ tx.status }}</span>
+                            {% elif tx.status == 'rejected' %}
+                                <span class="badge badge-red">{{ tx.status }}</span>
+                            {% else %}
+                                <span class="badge badge-gray">{{ tx.status }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="item-meta">时间：{{ tx.created_at }}</div>
+                        {% if tx.seller_name %}
+                        <div class="item-meta">卖家：{{ tx.seller_name }}（{{ tx.seller_contact or '无' }}）</div>
+                        {% endif %}
+                        <div class="item-actions">
+                            <a class="btn btn-secondary btn-sm" href="/textbook/{{ tx.textbook_id }}">查看教材详情</a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <div class="empty-icon">📋</div>
+                        <p>暂无交易记录</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

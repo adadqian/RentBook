@@ -1,208 +1,67 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>教材注册 - 教材交易区块链系统</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        header {
-            background-color: #4CAF50;
-            color: white;
-            padding: 20px;
-            text-align: center;
-        }
-        nav {
-            background-color: #333;
-            overflow: hidden;
-        }
-        nav a {
-            float: left;
-            display: block;
-            color: white;
-            text-align: center;
-            padding: 14px 16px;
-            text-decoration: none;
-        }
-        nav a:hover {
-            background-color: #ddd;
-            color: black;
-        }
-        .card {
-            background-color: white;
-            padding: 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h2 {
-            color: #333;
-        }
-        form {
-            margin-top: 20px;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        input[type="text"],
-        input[type="number"],
-        input[type="email"],
-        textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        input[type="submit"] {
-            background-color: #4CAF50;
-            color: white;
-            padding: 12px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        input[type="submit"]:hover {
-            background-color: #45a049;
-        }
-        .back-link {
-            display: inline-block;
-            margin-top: 20px;
-            color: #333;
-            text-decoration: none;
-        }
-        .back-link:hover {
-            text-decoration: underline;
-        }
-        .hint {
-            font-size: 12px;
-            color: #666;
-            margin-top: 5px;
-        }
-        .copy-btn {
-            background-color: #f0f0f0;
-            border: 1px solid #ddd;
-            padding: 4px 8px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            margin-left: 10px;
-        }
-        .copy-btn:hover {
-            background-color: #e0e0e0;
-        }
-        .textbook-id-display {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            margin: 15px 0;
-        }
-        .textbook-id-display h4 {
-            margin-top: 0;
-            color: #333;
-        }
-        .textbook-id-value {
-            font-family: monospace;
-            font-size: 16px;
-            background-color: #fff;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin: 10px 0;
-            word-break: break-all;
-        }
-    </style>
-</head>
-<body>
-    <header>
-        <h1>教材交易区块链系统</h1>
-        <p>基于区块链技术的教材交易管理平台</p>
-    </header>
-    
-    <nav>
-        <a href="/">首页</a>
-        <a href="/dashboard">我的后台</a>
-        <a href="/textbook/register">教材注册</a>
-        <a href="/transaction/initiate">发起交易</a>
-        <a href="/transaction/confirm">确认交易</a>
-        <a href="/blockchain/status">区块链状态</a>
-        {% if session.get('user_id') %}
-            <a href="/auth/logout">退出</a>
-        {% else %}
-            <a href="/auth/login">登录</a>
-        {% endif %}
-    </nav>
-    
-    <div class="container">
-        <div class="card">
-            <h2>教材信息注册</h2>
-            <p>请填写以下信息，将教材信息上链（当前登录用户将作为卖家）</p>
-            
+{% extends "base.html" %}
+{% block title %}教材注册{% endblock %}
+{% block page_title %}教材注册{% endblock %}
+{% block content %}
+<div style="max-width:720px;">
+    <div class="card">
+        <div class="card-header">
+            <h2>📖 教材信息注册</h2>
+            <span class="subtitle">将教材信息上链，当前登录用户将作为卖家</span>
+        </div>
+        <div class="card-body">
             <form method="POST" enctype="multipart/form-data">
-                <h3>教材基本信息</h3>
-                <div class="form-group">
-                    <label for="isbn">ISBN</label>
-                    <input type="text" id="isbn" name="isbn" required>
+                <div class="form-section">📚 教材基本信息</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="isbn">ISBN</label>
+                        <input type="text" id="isbn" name="isbn" class="form-control" required placeholder="例如：9787111640605">
+                    </div>
+                    <div class="form-group">
+                        <label for="version">版本</label>
+                        <input type="text" id="version" name="version" class="form-control" required placeholder="例如：第3版">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="version">版本</label>
-                    <input type="text" id="version" name="version" required>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="condition">品相</label>
+                        <select id="condition" name="condition" class="form-control" required>
+                            <option value="">请选择品相</option>
+                            <option value="全新">全新</option>
+                            <option value="九成新">九成新</option>
+                            <option value="八成新">八成新</option>
+                            <option value="七成新">七成新</option>
+                            <option value="六成新">六成新</option>
+                            <option value="五成新">五成新</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="initial_price">初始定价 (元)</label>
+                        <input type="number" id="initial_price" name="initial_price" class="form-control" step="0.01" required placeholder="例如：50.00">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="condition">品相</label>
-                    <select id="condition" name="condition" required>
-                        <option value="">请选择品相</option>
-                        <option value="全新">全新</option>
-                        <option value="九成新">九成新</option>
-                        <option value="八成新">八成新</option>
-                        <option value="七成新">七成新</option>
-                        <option value="六成新">六成新</option>
-                        <option value="五成新">五成新</option>
-                        <option value="其他">其他</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="initial_price">初始定价 (元)</label>
-                    <input type="number" id="initial_price" name="initial_price" step="0.01" required>
-                </div>
-                
-                <h3>教材辅助信息</h3>
+
+                <div class="form-section">📎 教材辅助信息</div>
                 <div class="form-group">
                     <label for="photos">照片上传</label>
-                    <input type="file" id="photos" name="photos" multiple accept="image/*">
-                    <p class="hint">提示：可选择多个图片文件</p>
+                    <input type="file" id="photos" name="photos" class="form-control" multiple accept="image/*">
+                    <span class="hint">提示：可选择多个图片文件</span>
                 </div>
                 <div class="form-group">
                     <label for="description">描述</label>
-                    <textarea id="description" name="description" rows="3" placeholder="教材详细描述"></textarea>
+                    <textarea id="description" name="description" class="form-control" rows="3" placeholder="教材详细描述，如使用情况、外观等"></textarea>
                 </div>
                 <div class="form-group">
                     <label for="location">位置</label>
-                    <input type="text" id="location" name="location" placeholder="例如: 图书馆三楼">
+                    <input type="text" id="location" name="location" class="form-control" placeholder="例如：图书馆三楼">
                 </div>
-                
-                <input type="submit" value="提交注册">
+
+                <div style="margin-top:24px;">
+                    <button type="submit" class="btn btn-primary">📤 提交注册</button>
+                    <a href="/" class="btn btn-secondary">返回首页</a>
+                </div>
             </form>
-            
-            <a href="/" class="back-link">← 返回首页</a>
         </div>
     </div>
-</body>
-</html>
+</div>
+{% endblock %}

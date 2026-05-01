@@ -3,32 +3,50 @@ import os
 from fisco_config import config
 
 # 添加SDK路径到Python路径
-sys.path.append(config.sdk_path)
+if config.sdk_path not in sys.path:
+    sys.path.append(config.sdk_path)
 
-from client.bcosclient import BcosClient
-from client.datatype_parser import DatatypeParser
-from client.common.compiler import Compiler
+try:
+    from client.bcosclient import BcosClient
+    from client.datatype_parser import DatatypeParser
+    from client.common.compiler import Compiler
+    _sdk_available = True
+except ImportError as e:
+    print(f"FISCO BCOS SDK 未安装或配置不正确: {e}")
+    print("系统将以模拟模式运行（仅使用 SQLite 数据库）")
+    _sdk_available = False
+    BcosClient = None
+    DatatypeParser = None
+    Compiler = None
 
 class FiscoClient:
     def __init__(self):
+        if not _sdk_available:
+            print("FISCO BCOS SDK 不可用，FiscoClient 将以离线模式运行")
+            self.client = None
+            self.parser = None
+            self.contract_abi = None
+            self.contract_address = None
+            return
+
         # 编译合约
         self._compile_contract()
-        
+
         # 初始化客户端
         self.client = BcosClient()
         print("BcosClient 初始化成功!")
-        
+
         # 解析合约ABI
-        self.contract_abi_path = f"contracts/{config.contract_name}.abi"
-        self.contract_bin_path = f"contracts/{config.contract_name}.bin"
-        
+        self.contract_abi_path = os.path.join(config.contracts_dir, f"{config.contract_name}.abi")
+        self.contract_bin_path = os.path.join(config.contracts_dir, f"{config.contract_name}.bin")
+
         self.parser = DatatypeParser(self.contract_abi_path)
         self.parser.load_abi_file(self.contract_abi_path)
         self.contract_abi = self.parser.contract_abi
-        
+
         # 合约地址文件
-        self.contract_address_file = "contract_address.txt"
-        
+        self.contract_address_file = os.path.join(config.base_dir, "contract_address.txt")
+
         # 尝试加载已保存的合约地址
         if os.path.exists(self.contract_address_file):
             try:
@@ -44,11 +62,13 @@ class FiscoClient:
             # 部署新合约
             self.contract_address = self._deploy_contract()
             self._save_contract_address()
-        
+
         print(f"合约地址: {self.contract_address}")
     
     def is_available(self):
         """检查节点与合约地址当前是否可用。"""
+        if not _sdk_available:
+            return False
         if not getattr(self, "client", None):
             return False
         if not getattr(self, "contract_address", ""):
@@ -77,7 +97,7 @@ class FiscoClient:
         print("编译合约...")
         compiler = Compiler()
         try:
-            compiler.compile_file(config.contract_file)
+            compiler.compile_file(config.contract_file, config.contracts_dir)
             print("合约编译成功")
         except Exception as e:
             print(f"合约编译失败: {e}")

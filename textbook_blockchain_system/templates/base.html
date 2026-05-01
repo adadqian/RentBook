@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}RentBook{% endblock %} - RentBook</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --sidebar-w: 240px;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --primary-light: #eef2ff;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --border: #e2e8f0;
+            --text: #1e293b;
+            --text-secondary: #64748b;
+            --text-muted: #94a3b8;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --info: #3b82f6;
+            --sidebar-bg: #0f172a;
+            --sidebar-hover: #1e293b;
+            --sidebar-active: #1e3a5f;
+            --radius: 8px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -1px rgba(0,0,0,0.04);
+        }
+
+        html { font-size: 14px; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+        }
+
+        /* ===== Sidebar ===== */
+        .sidebar {
+            position: fixed; top: 0; left: 0; bottom: 0;
+            width: var(--sidebar-w);
+            background: var(--sidebar-bg);
+            color: #cbd5e1;
+            display: flex; flex-direction: column;
+            z-index: 100;
+            overflow-y: auto;
+        }
+        .sidebar-brand {
+            padding: 20px 20px 16px;
+            border-bottom: 1px solid #1e293b;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .sidebar-brand .logo {
+            width: 36px; height: 36px;
+            background: var(--primary); border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; color: #fff; font-weight: 700;
+            flex-shrink: 0;
+        }
+        .sidebar-brand .brand-text { line-height: 1.3; }
+        .sidebar-brand .brand-text strong { display: block; color: #fff; font-size: 15px; }
+        .sidebar-brand .brand-text small { color: #64748b; font-size: 11px; }
+        .sidebar-nav { padding: 12px 0; flex: 1; }
+        .sidebar-nav .nav-label {
+            padding: 8px 20px 4px;
+            font-size: 11px; text-transform: uppercase;
+            color: #475569; letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+        .sidebar-nav a {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 20px;
+            color: #94a3b8; text-decoration: none;
+            font-size: 13px; transition: all 0.15s;
+            border-left: 3px solid transparent;
+        }
+        .sidebar-nav a:hover { background: var(--sidebar-hover); color: #e2e8f0; }
+        .sidebar-nav a.active {
+            background: var(--sidebar-active);
+            color: #fff;
+            border-left-color: var(--primary);
+        }
+        .sidebar-nav a .icon { width: 20px; text-align: center; font-size: 15px; flex-shrink: 0; }
+        .sidebar-footer {
+            padding: 12px 20px;
+            border-top: 1px solid #1e293b;
+            font-size: 12px; color: #475569;
+        }
+
+        /* ===== Main Content ===== */
+        .main {
+            margin-left: var(--sidebar-w);
+            flex: 1; min-height: 100vh;
+            display: flex; flex-direction: column;
+        }
+
+        /* ===== Top Bar ===== */
+        .topbar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 32px;
+            height: 60px;
+            display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 50;
+        }
+        .topbar .page-title { font-size: 16px; font-weight: 600; color: var(--text); }
+        .topbar-right { display: flex; align-items: center; gap: 16px; }
+        .topbar-right .user-info {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 13px; color: var(--text-secondary);
+        }
+        .topbar-right .user-info .avatar {
+            width: 32px; height: 32px;
+            background: var(--primary-light); color: var(--primary);
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 600;
+        }
+        .btn-logout {
+            padding: 6px 14px; border-radius: 6px;
+            background: transparent; color: var(--text-secondary);
+            border: 1px solid var(--border);
+            cursor: pointer; font-size: 12px; text-decoration: none; transition: all 0.15s;
+        }
+        .btn-logout:hover { background: #fef2f2; color: var(--danger); border-color: #fecaca; }
+
+        /* ===== Content ===== */
+        .content { padding: 24px 32px; flex: 1; }
+
+        /* ===== Cards ===== */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 20px; padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .card-header h2, .card-header h3 { font-size: 16px; font-weight: 600; margin: 0; }
+        .card-header .subtitle { font-size: 13px; color: var(--text-secondary); }
+        .card-body { }
+
+        /* ===== Stats Grid ===== */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .stat-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 20px;
+            box-shadow: var(--shadow);
+        }
+        .stat-card .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.3px; font-weight: 600; }
+        .stat-card .stat-value { font-size: 28px; font-weight: 700; color: var(--text); margin-top: 4px; }
+        .stat-card .stat-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .stat-card .stat-icon { float: right; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .stat-card .stat-icon.blue { background: #eff6ff; color: #3b82f6; }
+        .stat-card .stat-icon.green { background: #f0fdf4; color: #22c55e; }
+        .stat-card .stat-icon.purple { background: #f5f3ff; color: #8b5cf6; }
+        .stat-card .stat-icon.amber { background: #fffbeb; color: #f59e0b; }
+        .stat-card .stat-icon.cyan { background: #ecfeff; color: #06b6d4; }
+
+        /* ===== Grid ===== */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+        @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+        /* ===== Items / List ===== */
+        .item {
+            background: var(--bg); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 16px;
+            margin-bottom: 12px; transition: box-shadow 0.15s;
+        }
+        .item:hover { box-shadow: var(--shadow-md); }
+        .item .item-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+        .item .item-meta { font-size: 12px; color: var(--text-secondary); margin-bottom: 2px; }
+        .item .item-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+        /* ===== Status Badge ===== */
+        .badge {
+            display: inline-block; padding: 2px 10px; border-radius: 999px;
+            font-size: 11px; font-weight: 600; letter-spacing: 0.2px;
+        }
+        .badge-green { background: #f0fdf4; color: #15803d; }
+        .badge-yellow { background: #fefce8; color: #a16207; }
+        .badge-blue { background: #eff6ff; color: #1d4ed8; }
+        .badge-red { background: #fef2f2; color: #dc2626; }
+        .badge-gray { background: #f1f5f9; color: #475569; }
+        .badge-purple { background: #f5f3ff; color: #7c3aed; }
+        .status-available, .status-completed { background: #f0fdf4; color: #15803d; }
+        .status-pending { background: #fefce8; color: #a16207; }
+        .status-rejected { background: #fef2f2; color: #dc2626; }
+
+        /* ===== Buttons ===== */
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 16px; border-radius: 6px;
+            font-size: 13px; font-weight: 500; cursor: pointer;
+            border: 1px solid transparent; text-decoration: none;
+            transition: all 0.15s; line-height: 1.4;
+        }
+        .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
+        .btn-secondary:hover { background: var(--bg); }
+        .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+        .btn-danger:hover { background: var(--danger-hover); }
+        .btn-success { background: var(--success); color: #fff; border-color: var(--success); }
+        .btn-success:hover { background: #16a34a; }
+        .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+        .btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+        /* ===== Forms ===== */
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+        .form-group .hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+        .form-control {
+            width: 100%; padding: 9px 12px; border: 1px solid var(--border);
+            border-radius: 6px; font-size: 13px; color: var(--text);
+            background: var(--surface); transition: border-color 0.15s;
+            font-family: inherit;
+        }
+        .form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+        textarea.form-control { resize: vertical; min-height: 80px; }
+        select.form-control { appearance: auto; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+        .form-section { font-size: 15px; font-weight: 600; margin: 24px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+        .form-section:first-child { margin-top: 0; }
+
+        /* ===== Info Display ===== */
+        .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; font-size: 13px; }
+        .info-grid .label { color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
+        .info-grid .value { color: var(--text); word-break: break-all; }
+
+        /* ===== Code / Mono ===== */
+        .mono {
+            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+            background: #f1f5f9; padding: 2px 8px; border-radius: 4px;
+            font-size: 12px; word-break: break-all;
+        }
+        .mono-block {
+            font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+            background: #f8fafc; border: 1px solid var(--border);
+            border-radius: 6px; padding: 12px; font-size: 12px;
+            word-break: break-all; margin: 8px 0;
+        }
+
+        /* ===== Block Items (blockchain) ===== */
+        .block-item {
+            background: var(--bg); border: 1px solid var(--border);
+            border-left: 4px solid var(--primary);
+            border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+        }
+        .block-item h4 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+        .block-item .block-info { font-size: 12px; color: var(--text-secondary); line-height: 1.8; }
+
+        /* ===== Transaction List in Block ===== */
+        .tx-list { margin-top: 12px; padding-left: 0; list-style: none; }
+        .tx-item {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 6px; padding: 12px; margin-bottom: 8px;
+            font-size: 12px; line-height: 1.7;
+        }
+        .tx-item .tx-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .tx-item .tx-header .tx-type { font-weight: 600; font-size: 13px; }
+
+        /* ===== Pager ===== */
+        .pager { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 20px; }
+        .pager .page-info { font-size: 13px; color: var(--text-secondary); }
+
+        /* ===== Photos ===== */
+        .photo-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+        .photo-grid img {
+            max-width: 140px; max-height: 140px;
+            border: 1px solid var(--border); border-radius: 6px;
+            padding: 4px; background: var(--surface);
+            object-fit: cover;
+        }
+
+        /* ===== Alert / Info Box ===== */
+        .alert {
+            padding: 12px 16px; border-radius: 6px; font-size: 13px;
+            margin-bottom: 16px; border-left: 4px solid transparent;
+        }
+        .alert-info { background: #eff6ff; border-color: #3b82f6; color: #1e40af; }
+        .alert-warning { background: #fefce8; border-color: #f59e0b; color: #92400e; }
+        .alert-success { background: #f0fdf4; border-color: #22c55e; color: #166534; }
+        .alert-danger { background: #fef2f2; border-color: #ef4444; color: #991b1b; }
+
+        /* ===== Copy button ===== */
+        .btn-copy {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 4px;
+            background: var(--bg); border: 1px solid var(--border);
+            font-size: 11px; cursor: pointer; color: var(--text-secondary);
+            transition: all 0.15s;
+        }
+        .btn-copy:hover { background: var(--surface); border-color: var(--primary); color: var(--primary); }
+
+        /* ===== Empty state ===== */
+        .empty-state { text-align: center; padding: 32px 16px; color: var(--text-muted); }
+        .empty-state .empty-icon { font-size: 40px; margin-bottom: 8px; }
+        .empty-state p { font-size: 13px; }
+
+        /* ===== Flash messages ===== */
+        .flash { margin-bottom: 16px; }
+
+        /* ===== Responsive toggle ===== */
+        .sidebar-toggle { display: none; background: none; border: none; color: var(--text); font-size: 20px; cursor: pointer; padding: 4px; }
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); transition: transform 0.2s; }
+            .sidebar.open { transform: translateX(0); }
+            .main { margin-left: 0; }
+            .sidebar-toggle { display: block; }
+            .content { padding: 16px; }
+            .topbar { padding: 0 16px; }
+        }
+    </style>
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <div class="logo">RB</div>
+            <div class="brand-text">
+                <strong>RentBook</strong>
+                <small>教材交易管理平台</small>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-label">概览</div>
+            <a href="/" class="{% if request.path == '/' %}active{% endif %}">
+                <span class="icon">🏠</span> 首页
+            </a>
+            {% if session.get('user_id') %}
+            <a href="/dashboard" class="{% if request.path == '/dashboard' %}active{% endif %}">
+                <span class="icon">📊</span> 我的后台
+            </a>
+            {% endif %}
+
+            <div class="nav-label">操作</div>
+            <a href="/textbook/register" class="{% if request.path == '/textbook/register' %}active{% endif %}">
+                <span class="icon">📖</span> 教材注册
+            </a>
+            <a href="/transaction/initiate" class="{% if request.path == '/transaction/initiate' %}active{% endif %}">
+                <span class="icon">🤝</span> 发起交易
+            </a>
+            <a href="/transaction/confirm" class="{% if request.path == '/transaction/confirm' %}active{% endif %}">
+                <span class="icon">✅</span> 确认交易
+            </a>
+
+            <div class="nav-label">查询</div>
+            <a href="/textbook/search" class="{% if request.path == '/textbook/search' %}active{% endif %}">
+                <span class="icon">🔍</span> 教材查询
+            </a>
+            <a href="/blockchain/status" class="{% if request.path == '/blockchain/status' %}active{% endif %}">
+                <span class="icon">⛓️</span> 区块链状态
+            </a>
+        </nav>
+        <div class="sidebar-footer">RentBook v1.0</div>
+    </aside>
+
+    <!-- Main -->
+    <div class="main">
+        <header class="topbar">
+            <div style="display:flex;align-items:center;gap:12px;">
+                <button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+                <h1 class="page-title">{% block page_title %}首页{% endblock %}</h1>
+            </div>
+            <div class="topbar-right">
+                {% if session.get('user_id') %}
+                <div class="user-info">
+                    <span class="avatar">{{ session.get('user_name', '?')[:1] }}</span>
+                    <span>{{ session.get('user_name', '用户') }}</span>
+                </div>
+                <a href="/auth/logout" class="btn-logout">退出登录</a>
+                {% else %}
+                <a href="/auth/login" class="btn btn-primary btn-sm">登录</a>
+                <a href="/auth/register" class="btn btn-secondary btn-sm">注册</a>
+                {% endif %}
+            </div>
+        </header>
+
+        <div class="content">
+            {% for category, message in get_flashed_messages(with_categories=true) %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    <script>
+        // Close sidebar on outside click (mobile)
+        document.addEventListener('click', function(e) {
+            var sidebar = document.getElementById('sidebar');
+            if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
+                if (!sidebar.contains(e.target) && !e.target.closest('.sidebar-toggle')) {
+                    sidebar.classList.remove('open');
+                }
+            }
+        });
+
+        // Copy to clipboard helper
+        function copyText(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                var el = document.createElement('div');
+                el.textContent = '复制成功';
+                el.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1e293b;color:#fff;padding:12px 24px;border-radius:8px;font-size:14px;z-index:9999;';
+                document.body.appendChild(el);
+                setTimeout(function() { el.remove(); }, 1200);
+            }).catch(function() {
+                alert('复制失败，请手动复制');
+            });
+        }
+        function copyTextFromId(id) {
+            var el = document.getElementById(id);
+            if (el) copyText(el.textContent);
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
