@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}等待审核{% endblock %}
+{% block page_title %}等待审核{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 500px; margin: 40px auto; text-align: center;">
+    <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
+    <h2 style="margin-bottom: 12px;">注册成功，等待审核</h2>
+    <p style="color: var(--text-secondary); margin-bottom: 24px;">
+        您的账号 <strong>{{ email }}</strong> 已提交注册申请。<br>
+        请等待管理员审核通过后才能登录。
+    </p>
+    <a href="{{ url_for('login') }}" class="btn btn-primary">返回登录页面</a>
+</div>
+{% endblock %}

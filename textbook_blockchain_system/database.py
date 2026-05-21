@@ -11,7 +11,7 @@ class DatabaseManager:
     def _init_database(self):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         # 创建用户表
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
@@ -20,14 +20,21 @@ class DatabaseManager:
             contact TEXT NOT NULL,
             email TEXT,
             password_hash TEXT,
+            role TEXT DEFAULT 'user',
+            status TEXT DEFAULT 'pending',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
 
+        # 字段迁移：兼容旧表
         cursor.execute("PRAGMA table_info(users)")
         existing_user_columns = {row[1] for row in cursor.fetchall()}
         if 'password_hash' not in existing_user_columns:
             cursor.execute('ALTER TABLE users ADD COLUMN password_hash TEXT')
+        if 'role' not in existing_user_columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'")
+        if 'status' not in existing_user_columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'")
         
         # 创建教材辅助信息表
         cursor.execute('''
@@ -61,13 +68,16 @@ class DatabaseManager:
         conn.commit()
         conn.close()
 
+        # 创建默认管理员账号
+        self._ensure_admin_exists()
+
     def get_user_by_email(self, email):
         if not email:
             return None
 
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute('SELECT user_id, name, contact, email, password_hash, created_at FROM users WHERE email = ?', (email,))
+        cursor.execute('SELECT user_id, name, contact, email, password_hash, role, status, created_at FROM users WHERE email = ?', (email,))
         row = cursor.fetchone()
         conn.close()
 
@@ -79,7 +89,9 @@ class DatabaseManager:
             'contact': row[2],
             'email': row[3],
             'password_hash': row[4],
-            'created_at': row[5],
+            'role': row[5],
+            'status': row[6],
+            'created_at': row[7],
         }
 
     def create_user_with_password(self, user_id, name, contact, email, password):
@@ -96,8 +108,8 @@ class DatabaseManager:
         cursor = conn.cursor()
         try:
             cursor.execute(
-                'INSERT INTO users (user_id, name, contact, email, password_hash) VALUES (?, ?, ?, ?, ?)',
-                (user_id, name, contact, email, password_hash),
+                'INSERT INTO users (user_id, name, contact, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                (user_id, name, contact, email, password_hash, 'user', 'pending'),
             )
             conn.commit()
             return True
@@ -119,6 +131,8 @@ class DatabaseManager:
             'name': user['name'],
             'contact': user['contact'],
             'email': user['email'],
+            'role': user['role'],
+            'status': user['status'],
         }
 
     def get_textbooks_by_seller(self, seller_id):
@@ -247,37 +261,43 @@ class DatabaseManager:
             )
         return result
     
-    def add_user(self, user_id, name, contact, email=None):
+    def add_user(self, user_id, name, contact, email=None, role='user', status='active'):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         try:
             cursor.execute('''
-            INSERT INTO users (user_id, name, contact, email)
-            VALUES (?, ?, ?, ?)
-            ''', (user_id, name, contact, email))
+            INSERT INTO users (user_id, name, contact, email, role, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ''', (user_id, name, contact, email, role, status))
             conn.commit()
             return True
         except sqlite3.IntegrityError:
             return False
         finally:
             conn.close()
-    
+
     def get_user(self, user_id):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
-        cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+
+        cursor.execute(
+            'SELECT user_id, name, contact, email, password_hash, role, status, created_at FROM users WHERE user_id = ?',
+            (user_id,)
+        )
         user = cursor.fetchone()
         conn.close()
-        
+
         if user:
             return {
                 'user_id': user[0],
                 'name': user[1],
                 'contact': user[2],
                 'email': user[3],
-                'created_at': user[4]
+                'password_hash': user[4],
+                'role': user[5],
+                'status': user[6],
+                'created_at': user[7]
             }
         return None
     
@@ -479,11 +499,11 @@ class DatabaseManager:
     def get_transactions_by_textbook(self, textbook_id):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         cursor.execute('SELECT * FROM transactions WHERE textbook_id = ? ORDER BY created_at DESC', (textbook_id,))
         txs = cursor.fetchall()
         conn.close()
-        
+
         transactions = []
         for tx in txs:
             transactions.append({
@@ -497,3 +517,121 @@ class DatabaseManager:
                 'updated_at': tx[7]
             })
         return transactions
+
+    # ============ Admin methods ============
+
+    def get_all_users(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT user_id, name, contact, email, role, status, created_at FROM users ORDER BY created_at DESC'
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        result = []
+        for row in rows:
+            result.append({
+                'user_id': row[0],
+                'name': row[1],
+                'contact': row[2],
+                'email': row[3],
+                'role': row[4],
+                'status': row[5],
+                'created_at': row[6],
+            })
+        return result
+
+    def update_user_status(self, user_id, status):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET status = ? WHERE user_id = ?', (status, user_id))
+        conn.commit()
+        result = cursor.rowcount > 0
+        conn.close()
+        return result
+
+    def update_user_role(self, user_id, role):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET role = ? WHERE user_id = ?', (role, user_id))
+        conn.commit()
+        result = cursor.rowcount > 0
+        conn.close()
+        return result
+
+    def count_users_by_status(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT status, COUNT(*) FROM users GROUP BY status"
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        return {row[0]: row[1] for row in rows}
+
+    def get_all_transactions_with_details(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                t.transaction_id,
+                t.textbook_id,
+                t.buyer_id,
+                t.offer_price,
+                t.status,
+                t.blockchain_hash,
+                t.created_at,
+                t.updated_at,
+                b.name as buyer_name,
+                b.email as buyer_email,
+                m.description as textbook_description,
+                m.location as textbook_location,
+                s.name as seller_name,
+                s.email as seller_email
+            FROM transactions t
+            LEFT JOIN users b ON b.user_id = t.buyer_id
+            LEFT JOIN textbook_metadata m ON m.textbook_id = t.textbook_id
+            LEFT JOIN users s ON s.user_id = m.seller_id
+            ORDER BY t.created_at DESC
+            """
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        result = []
+        for row in rows:
+            result.append({
+                'transaction_id': row[0],
+                'textbook_id': row[1],
+                'buyer_id': row[2],
+                'offer_price': row[3],
+                'status': row[4],
+                'blockchain_hash': row[5],
+                'created_at': row[6],
+                'updated_at': row[7],
+                'buyer_name': row[8],
+                'buyer_email': row[9],
+                'textbook_description': row[10],
+                'textbook_location': row[11],
+                'seller_name': row[12],
+                'seller_email': row[13],
+            })
+        return result
+
+    def _ensure_admin_exists(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM users WHERE email = ?", ('admin',))
+        if not cursor.fetchone():
+            import os
+            default_password = os.environ.get('ADMIN_DEFAULT_PASSWORD', 'admin')
+            password_hash = generate_password_hash(default_password)
+            cursor.execute(
+                '''INSERT INTO users (user_id, name, contact, email, password_hash, role, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                ('admin_root', '管理员', '13800138000', 'admin', password_hash, 'admin', 'active')
+            )
+            conn.commit()
+        conn.close()

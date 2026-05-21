@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}用户管理{% endblock %}
+{% block page_title %}用户管理{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>所有用户</h2>
+        <span class="subtitle">共 {{ users|length }} 位用户</span>
+    </div>
+    <div class="card-body">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+                <tr style="border-bottom:2px solid var(--border);text-align:left;">
+                    <th style="padding:10px;">用户名</th>
+                    <th style="padding:10px;">邮箱</th>
+                    <th style="padding:10px;">联系方式</th>
+                    <th style="padding:10px;">角色</th>
+                    <th style="padding:10px;">状态</th>
+                    <th style="padding:10px;">注册时间</th>
+                    <th style="padding:10px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:10px;">{{ user.name }}</td>
+                    <td style="padding:10px;">{{ user.email }}</td>
+                    <td style="padding:10px;">{{ user.contact }}</td>
+                    <td style="padding:10px;">
+                        {% if user.role == 'admin' %}
+                        <span class="badge badge-purple">管理员</span>
+                        {% else %}
+                        <span class="badge badge-gray">用户</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding:10px;">
+                        {% if user.status == 'active' %}
+                        <span class="badge badge-green">正常</span>
+                        {% elif user.status == 'pending' %}
+                        <span class="badge badge-yellow">待审核</span>
+                        {% elif user.status == 'banned' %}
+                        <span class="badge badge-red">已封禁</span>
+                        {% else %}
+                        <span class="badge badge-gray">{{ user.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding:10px;">{{ user.created_at }}</td>
+                    <td style="padding:10px;">
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                            {% if user.status == 'pending' %}
+                            <form action="/admin/user/{{ user.user_id }}/status" method="post" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="status" value="active">
+                                <button type="submit" class="btn btn-success btn-sm">通过审核</button>
+                            </form>
+                            {% endif %}
+                            {% if user.status != 'banned' and user.user_id != session.user_id %}
+                            <form action="/admin/user/{{ user.user_id }}/status" method="post" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="status" value="banned">
+                                <button type="submit" class="btn btn-danger btn-sm">封禁</button>
+                            </form>
+                            {% elif user.status == 'banned' %}
+                            <form action="/admin/user/{{ user.user_id }}/status" method="post" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="status" value="active">
+                                <button type="submit" class="btn btn-success btn-sm">解封</button>
+                            </form>
+                            {% endif %}
+                            {% if user.role == 'user' %}
+                            <form action="/admin/user/{{ user.user_id }}/role" method="post" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="role" value="admin">
+                                <button type="submit" class="btn btn-primary btn-sm">设为管理员</button>
+                            </form>
+                            {% else %}
+                            <form action="/admin/user/{{ user.user_id }}/role" method="post" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                <input type="hidden" name="role" value="user">
+                                <button type="submit" class="btn btn-secondary btn-sm">取消管理员</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

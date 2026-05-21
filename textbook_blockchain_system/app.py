@@ -1,15 +1,27 @@
 import os
 import uuid
+import secrets
 from functools import wraps
 
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory, session
+from markupsafe import escape
 from textbook import TextbookTransaction
 from database import DatabaseManager
 import hashlib
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('FLASK_SECRET_KEY') or os.urandom(32)
+# 持久化 SECRET_KEY
+secret_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.flask_secret')
+if os.path.exists(secret_file):
+    with open(secret_file, 'r', encoding='utf-8') as f:
+        app.secret_key = f.read().strip()
+else:
+    key = secrets.token_hex(32)
+    with open(secret_file, 'w', encoding='utf-8') as f:
+        f.write(key)
+    app.secret_key = key
+
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit
 
@@ -41,11 +53,44 @@ def login_required(view_func):
     return wrapper
 
 
+def admin_required(view_func):
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        user_id = session.get('user_id')
+        if not user_id:
+            return redirect(url_for('login', next=request.path))
+        user = db_manager.get_user(user_id)
+        if not user or user.get('role') != 'admin':
+            return render_error('您没有管理员权限', 403)
+        return view_func(*args, **kwargs)
+
+    return wrapper
+
+
 def render_error(message, status_code=400):
+    safe_message = escape(message)
     return (
-        f"<h3>{message}</h3><p><a href='{url_for('index')}'>返回首页</a></p>",
+        f"<h3>{safe_message}</h3><p><a href='{url_for('index')}'>返回首页</a></p>",
         status_code,
     )
+
+
+def _ensure_csrf_token():
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_hex(16)
+
+
+def _validate_csrf():
+    token = session.get('csrf_token')
+    if not token or token != request.form.get('csrf_token'):
+        return render_error('CSRF token 验证失败', 403)
+    return None
+
+
+@app.before_request
+def before_request():
+    _ensure_csrf_token()
+
 
 @app.route('/')
 def index():
@@ -195,9 +240,8 @@ def register():
         if not ok:
             return render_error('注册失败：邮箱已存在或用户已存在', 400)
 
-        session['user_id'] = user_id
-        session['user_name'] = name
-        return redirect(url_for('dashboard'))
+        # 注册成功，显示等待审核页面
+        return render_template('auth_pending.html', email=email)
 
     return render_template('auth_register.html')
 
@@ -211,8 +255,15 @@ def login():
         if not user:
             return render_error('邮箱或密码错误', 401)
 
+        # 检查用户状态
+        if user['status'] == 'pending':
+            return render_error('您的账号正在审核中，请等待管理员审批', 403)
+        if user['status'] == 'banned':
+            return render_error('您的账号已被封禁，请联系管理员', 403)
+
         session['user_id'] = user['user_id']
         session['user_name'] = user['name']
+        session['user_role'] = user['role']
 
         next_path = request.args.get('next')
         return redirect(next_path or url_for('dashboard'))
@@ -224,6 +275,94 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for('index'))
+
+
+# ============ Admin Routes ============
+
+@app.route('/admin/dashboard')
+@admin_required
+def admin_dashboard():
+    # 统计数据
+    user_counts = db_manager.count_users_by_status()
+    all_users = db_manager.get_all_users()
+    total_users = len(all_users)
+    pending_users = sum(1 for u in all_users if u['status'] == 'pending')
+    banned_users = sum(1 for u in all_users if u['status'] == 'banned')
+    active_users = sum(1 for u in all_users if u['status'] == 'active')
+
+    all_transactions = db_manager.get_all_transactions_with_details()
+    total_transactions = len(all_transactions)
+    pending_transactions = sum(1 for t in all_transactions if t['status'] == 'pending')
+    completed_transactions = sum(1 for t in all_transactions if t['status'] == 'completed')
+
+    return render_template(
+        'admin_dashboard.html',
+        total_users=total_users,
+        pending_users=pending_users,
+        banned_users=banned_users,
+        active_users=active_users,
+        total_transactions=total_transactions,
+        pending_transactions=pending_transactions,
+        completed_transactions=completed_transactions,
+    )
+
+
+@app.route('/admin/users')
+@admin_required
+def admin_users():
+    users = db_manager.get_all_users()
+    return render_template('admin_users.html', users=users, csrf_token=session.get('csrf_token'))
+
+
+@app.route('/admin/user/<user_id>/status', methods=['POST'])
+@admin_required
+def admin_user_status(user_id):
+    csrf_error = _validate_csrf()
+    if csrf_error:
+        return csrf_error
+
+    status = request.form.get('status')
+    if status not in ('active', 'banned', 'pending'):
+        return render_error('无效的状态', 400)
+
+    # 不允许封禁自己
+    if user_id == session.get('user_id') and status == 'banned':
+        return render_error('不能封禁自己', 400)
+
+    ok = db_manager.update_user_status(user_id, status)
+    if not ok:
+        return render_error('操作失败', 500)
+
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/user/<user_id>/role', methods=['POST'])
+@admin_required
+def admin_user_role(user_id):
+    csrf_error = _validate_csrf()
+    if csrf_error:
+        return csrf_error
+
+    role = request.form.get('role')
+    if role not in ('user', 'admin'):
+        return render_error('无效的角色', 400)
+
+    # 不允许将自己降级为普通用户
+    if user_id == session.get('user_id') and role == 'user':
+        return render_error('不能将自己降级为普通用户', 400)
+
+    ok = db_manager.update_user_role(user_id, role)
+    if not ok:
+        return render_error('操作失败', 500)
+
+    return redirect(url_for('admin_users'))
+
+
+@app.route('/admin/transactions')
+@admin_required
+def admin_transactions():
+    transactions = db_manager.get_all_transactions_with_details()
+    return render_template('admin_transactions.html', transactions=transactions)
 
 
 @app.route('/dashboard')

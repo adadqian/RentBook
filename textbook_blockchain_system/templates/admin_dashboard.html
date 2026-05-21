@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}管理后台{% endblock %}
+{% block page_title %}管理后台{% endblock %}
+
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">👥</div>
+        <div class="stat-label">总用户数</div>
+        <div class="stat-value">{{ total_users }}</div>
+        <div class="stat-desc">注册总用户数</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon amber">⏳</div>
+        <div class="stat-label">待审核用户</div>
+        <div class="stat-value">{{ pending_users }}</div>
+        <div class="stat-desc">等待管理员审批</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">✅</div>
+        <div class="stat-label">已激活用户</div>
+        <div class="stat-value">{{ active_users }}</div>
+        <div class="stat-desc">可正常登录的用户</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">🚫</div>
+        <div class="stat-label">已封禁用户</div>
+        <div class="stat-value">{{ banned_users }}</div>
+        <div class="stat-desc">被封禁的账号</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">📋</div>
+        <div class="stat-label">总交易数</div>
+        <div class="stat-value">{{ total_transactions }}</div>
+        <div class="stat-desc">所有交易记录</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon cyan">🤝</div>
+        <div class="stat-label">待确认交易</div>
+        <div class="stat-value">{{ pending_transactions }}</div>
+        <div class="stat-desc">等待卖家确认</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">✅</div>
+        <div class="stat-label">已完成交易</div>
+        <div class="stat-value">{{ completed_transactions }}</div>
+        <div class="stat-desc">交易完成的记录</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>快捷操作</h2>
+    </div>
+    <div class="card-body" style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <a href="/admin/users" class="btn btn-primary">👥 用户管理</a>
+        <a href="/admin/transactions" class="btn btn-primary">📋 交易监管</a>
+    </div>
+</div>
+{% endblock %}

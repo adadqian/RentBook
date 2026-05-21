@@ -365,6 +365,19 @@
             <a href="/blockchain/status" class="{% if request.path == '/blockchain/status' %}active{% endif %}">
                 <span class="icon">⛓️</span> 区块链状态
             </a>
+
+            {% if session.get('user_role') == 'admin' %}
+            <div class="nav-label">管理</div>
+            <a href="/admin/dashboard" class="{% if request.path == '/admin/dashboard' %}active{% endif %}">
+                <span class="icon">🛠️</span> 管理后台
+            </a>
+            <a href="/admin/users" class="{% if request.path == '/admin/users' %}active{% endif %}">
+                <span class="icon">👥</span> 用户管理
+            </a>
+            <a href="/admin/transactions" class="{% if request.path == '/admin/transactions' %}active{% endif %}">
+                <span class="icon">📋</span> 交易监管
+            </a>
+            {% endif %}
         </nav>
         <div class="sidebar-footer">RentBook v1.0</div>
     </aside>
