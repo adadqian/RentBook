@@ -606,14 +606,83 @@ def search_textbook():
         history = transaction_system.get_textbook_history(textbook_id)
         # 获取教材完整信息
         combined_info = db_manager.get_combined_textbook_info(textbook_id, history)
-        # 获取相关交易（使用智能合约中的交易历史）
-        related_blocks = history
-        return render_template('search_result.html', 
-                             textbook_id=textbook_id, 
-                             history=history, 
-                             combined_info=combined_info, 
+        # 从链上查询真实区块数据构建 related_blocks
+        related_blocks = _get_related_blocks_from_chain(textbook_id)
+        return render_template('search_result.html',
+                             textbook_id=textbook_id,
+                             history=history,
+                             combined_info=combined_info,
                              related_blocks=related_blocks)
     return render_template('search_textbook.html')
+
+
+def _get_related_blocks_from_chain(textbook_id):
+    """从 FISCO BCOS 链上查询与指定教材相关的区块数据"""
+    from datetime import datetime
+    from fisco_client import fisco_client
+
+    related_blocks = []
+
+    if not (fisco_client and fisco_client.is_available()):
+        return related_blocks
+
+    try:
+        raw_block_number = fisco_client.client.getBlockNumber()
+        if isinstance(raw_block_number, str) and raw_block_number.startswith("0x"):
+            latest_index = int(raw_block_number, 16)
+        else:
+            latest_index = int(raw_block_number)
+
+        all_transactions = db_manager.get_transactions_by_textbook(textbook_id)
+        tx_hashes = {tx['blockchain_hash'] for tx in all_transactions if tx.get('blockchain_hash')}
+
+        for i in range(latest_index + 1):
+            block = fisco_client.client.getBlockByNumber(i, True)
+            if not block:
+                continue
+
+            # 检查该区块是否包含与该教材相关的交易
+            block_has_related_tx = False
+            for tx in block.get('transactions', []):
+                if tx.get('hash', '') in tx_hashes:
+                    block_has_related_tx = True
+                    break
+                # 也检查合约调用中的 textbook_id 参数
+                tx_input = tx.get('input', '')
+                if tx_input and getattr(fisco_client, 'parser', None):
+                    try:
+                        parsed = fisco_client.parser.parse_transaction_input(tx_input)
+                        if parsed and isinstance(parsed, dict):
+                            args = parsed.get('args', [])
+                            # registerTextbook / initiateTransaction 的 args 中包含 textbook_id
+                            if args and textbook_id in args:
+                                block_has_related_tx = True
+                                break
+                    except Exception:
+                        pass
+
+            if not block_has_related_tx:
+                continue
+
+            timestamp_hex = block.get('timestamp', '0')
+            try:
+                readable_time = datetime.fromtimestamp(int(str(timestamp_hex), 16)).strftime('%Y-%m-%d %H:%M:%S')
+            except Exception:
+                readable_time = str(timestamp_hex)
+
+            block_info = {
+                'index': i,
+                'timestamp': readable_time,
+                'previous_hash': block.get('parentHash', ''),
+                'hash': block.get('hash', ''),
+                'transactions': block.get('transactions', [])
+            }
+            related_blocks.append(block_info)
+
+    except Exception as e:
+        print(f"查询相关区块失败: {e}")
+
+    return related_blocks
 
 
 @app.route('/marketplace')
