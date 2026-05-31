@@ -359,6 +359,9 @@
             </a>
 
             <div class="nav-label">查询</div>
+            <a href="/marketplace" class="{% if request.path == '/marketplace' %}active{% endif %}">
+                <span class="icon">🏪</span> 教材广场
+            </a>
             <a href="/textbook/search" class="{% if request.path == '/textbook/search' %}active{% endif %}">
                 <span class="icon">🔍</span> 教材查询
             </a>

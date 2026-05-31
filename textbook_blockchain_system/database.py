@@ -635,3 +635,57 @@ class DatabaseManager:
             )
             conn.commit()
         conn.close()
+
+    def get_available_textbooks(self, keyword=None):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        params = []
+        if keyword:
+            like_keyword = f"%{keyword}%"
+            params.append(like_keyword)
+            cursor.execute(
+                """
+                SELECT m.textbook_id, m.photos, m.description, m.seller_id, m.location, m.created_at,
+                       u.name as seller_name, u.contact as seller_contact, u.email as seller_email
+                FROM textbook_metadata m
+                LEFT JOIN users u ON u.user_id = m.seller_id
+                WHERE m.description LIKE ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM transactions t
+                      WHERE t.textbook_id = m.textbook_id AND t.status = 'completed'
+                  )
+                ORDER BY m.created_at DESC
+                """,
+                (like_keyword,)
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT m.textbook_id, m.photos, m.description, m.seller_id, m.location, m.created_at,
+                       u.name as seller_name, u.contact as seller_contact, u.email as seller_email
+                FROM textbook_metadata m
+                LEFT JOIN users u ON u.user_id = m.seller_id
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM transactions t
+                    WHERE t.textbook_id = m.textbook_id AND t.status = 'completed'
+                )
+                ORDER BY m.created_at DESC
+                """
+            )
+        rows = cursor.fetchall()
+        conn.close()
+
+        result = []
+        for row in rows:
+            result.append({
+                'textbook_id': row[0],
+                'photos': row[1],
+                'description': row[2],
+                'seller_id': row[3],
+                'location': row[4],
+                'created_at': row[5],
+                'seller_name': row[6],
+                'seller_contact': row[7],
+                'seller_email': row[8],
+            })
+        return result

@@ -69,10 +69,7 @@ def admin_required(view_func):
 
 def render_error(message, status_code=400):
     safe_message = escape(message)
-    return (
-        f"<h3>{safe_message}</h3><p><a href='{url_for('index')}'>返回首页</a></p>",
-        status_code,
-    )
+    return render_template('error.html', message=safe_message, status_code=status_code), status_code
 
 
 def _ensure_csrf_token():
@@ -617,6 +614,13 @@ def search_textbook():
                              combined_info=combined_info, 
                              related_blocks=related_blocks)
     return render_template('search_textbook.html')
+
+
+@app.route('/marketplace')
+def marketplace():
+    keyword = request.args.get('keyword', '').strip()
+    textbooks = db_manager.get_available_textbooks(keyword if keyword else None)
+    return render_template('marketplace.html', textbooks=textbooks, keyword=keyword)
 
 
 def _register_textbook_v2():

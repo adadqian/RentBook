@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}教材广场{% endblock %}
+{% block page_title %}教材广场{% endblock %}
+{% block content %}
+
+<div class="card">
+    <div class="card-header">
+        <div>
+            <h2>📖 教材广场</h2>
+            <p class="subtitle">浏览所有在售的教材，支持按描述关键词搜索</p>
+        </div>
+    </div>
+    <div class="card-body">
+        <form method="get" action="{{ url_for('marketplace') }}" style="display: flex; gap: 12px; margin-bottom: 24px;">
+            <input type="text" name="keyword" class="form-control" placeholder="输入关键词搜索教材描述..."
+                   value="{{ keyword or '' }}" style="flex: 1; max-width: 400px;">
+            <button type="submit" class="btn btn-primary">🔍 搜索</button>
+            {% if keyword %}
+            <a href="{{ url_for('marketplace') }}" class="btn btn-secondary">清除</a>
+            {% endif %}
+        </form>
+
+        {% if keyword %}
+        <p class="subtitle" style="margin-bottom: 16px;">
+            搜索关键词：<span class="mono">{{ keyword }}</span>，找到 {{ textbooks|length }} 本教材
+        </p>
+        {% endif %}
+
+        {% if textbooks %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
+            {% for tb in textbooks %}
+            <div style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column;">
+                <!-- Photos -->
+                <div style="height: 180px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                    {% if tb.photos %}
+                        {% set first_photo = tb.photos.split(',')[0] %}
+                        <img src="{{ url_for('uploaded_file', filename=first_photo) }}" alt="教材图片"
+                             style="width: 100%; height: 100%; object-fit: cover;">
+                    {% else %}
+                        <span style="font-size: 48px; color: var(--text-muted);">📚</span>
+                    {% endif %}
+                </div>
+                <!-- Info -->
+                <div style="padding: 16px; flex: 1; display: flex; flex-direction: column;">
+                    <p style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 8px; line-height: 1.5;">
+                        {{ tb.description[:50] }}{% if tb.description and tb.description|length > 50 %}...{% endif %}
+                    </p>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">
+                        📍 {{ tb.location or '未知地点' }}
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
+                        👤 {{ tb.seller_name or '未知卖家' }}
+                    </div>
+                    <div style="margin-top: auto;">
+                        <a href="{{ url_for('textbook_detail', textbook_id=tb.textbook_id) }}" class="btn btn-primary btn-sm" style="width: 100%; justify-content: center;">
+                            查看详情
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <p>暂无在售教材</p>
+            {% if keyword %}
+            <p style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">
+                没有找到与 "<strong>{{ keyword }}</strong>" 相关的教材
+            </p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
