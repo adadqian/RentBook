@@ -359,7 +359,26 @@ def admin_user_role(user_id):
 @admin_required
 def admin_transactions():
     transactions = db_manager.get_all_transactions_with_details()
-    return render_template('admin_transactions.html', transactions=transactions)
+    textbook_id = request.args.get('textbook_id', '').strip()
+
+    search_result = None
+    if textbook_id:
+        search_result = {
+            'textbook_id': textbook_id,
+            'metadata': db_manager.get_textbook_metadata(textbook_id),
+            'transactions': db_manager.get_transactions_by_textbook(textbook_id),
+            'related_blocks': _get_related_blocks_from_chain(textbook_id),
+        }
+        if search_result['metadata']:
+            seller = db_manager.get_user(search_result['metadata'].get('seller_id', ''))
+            search_result['seller'] = seller
+
+    return render_template(
+        'admin_transactions.html',
+        transactions=transactions,
+        search_textbook_id=textbook_id,
+        search_result=search_result,
+    )
 
 
 @app.route('/dashboard')

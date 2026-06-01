@@ -3,16 +3,155 @@
 {% block page_title %}交易监管{% endblock %}
 
 {% block content %}
+<!-- ===== 教材交易记录搜索 ===== -->
+<div class="card">
+    <div class="card-header">
+        <h2>按教材ID搜索交易记录</h2>
+    </div>
+    <div class="card-body">
+        <form method="get" action="{{ url_for('admin_transactions') }}" style="display:flex;align-items:center;gap:10px;">
+            <input type="text" name="textbook_id" class="form-control" placeholder="输入教材ID搜索完整交易记录..." value="{{ search_textbook_id or '' }}" style="flex:1;max-width:480px;">
+            <button type="submit" class="btn btn-primary">搜索</button>
+            {% if search_textbook_id %}
+            <a href="{{ url_for('admin_transactions') }}" class="btn btn-secondary">清除</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<!-- ===== 教材完整交易记录 ===== -->
+{% if search_result %}
+{% set meta = search_result.metadata %}
+<div class="card">
+    <div class="card-header">
+        <h2>📖 教材完整交易记录</h2>
+        <span class="subtitle">教材ID：<span class="mono">{{ search_textbook_id }}</span></span>
+    </div>
+    <div class="card-body">
+
+        {% if meta %}
+        <!-- 教材基本信息 -->
+        <h3 style="font-size:15px;font-weight:600;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);">📋 教材基本信息</h3>
+        <div class="info-grid" style="margin-bottom:20px;">
+            <span class="label">教材ID</span><span class="value"><span class="mono">{{ search_textbook_id }}</span></span>
+            <span class="label">描述</span><span class="value">{{ meta.description or '无描述' }}</span>
+            <span class="label">位置</span><span class="value">{{ meta.location or '未填写' }}</span>
+            <span class="label">登记时间</span><span class="value">{{ meta.created_at or '-' }}</span>
+            {% if search_result.seller %}
+            <span class="label">卖家</span><span class="value">{{ search_result.seller.name }} ({{ search_result.seller.email or '无邮箱' }})</span>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="alert alert-warning">
+            未找到教材 <span class="mono">{{ search_textbook_id }}</span> 的基本信息。
+        </div>
+        {% endif %}
+
+        <!-- 交易记录列表 -->
+        <h3 style="font-size:15px;font-weight:600;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);">💰 交易记录（共 {{ search_result.transactions|length }} 笔）</h3>
+        {% if search_result.transactions %}
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">
+            <thead>
+                <tr style="border-bottom:2px solid var(--border);text-align:left;">
+                    <th style="padding:10px;">交易ID</th>
+                    <th style="padding:10px;">买家ID</th>
+                    <th style="padding:10px;">报价</th>
+                    <th style="padding:10px;">状态</th>
+                    <th style="padding:10px;">创建时间</th>
+                    <th style="padding:10px;">链上哈希</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tx in search_result.transactions %}
+                <tr style="border-bottom:1px solid var(--border);">
+                    <td style="padding:10px;" class="mono">{{ tx.transaction_id }}</td>
+                    <td style="padding:10px;" class="mono">{{ tx.buyer_id or '-' }}</td>
+                    <td style="padding:10px;">¥{{ "%.2f"|format(tx.offer_price or 0) }}</td>
+                    <td style="padding:10px;">
+                        {% if tx.status == 'completed' %}
+                        <span class="badge badge-green">已完成</span>
+                        {% elif tx.status == 'pending' %}
+                        <span class="badge badge-yellow">待确认</span>
+                        {% elif tx.status == 'rejected' %}
+                        <span class="badge badge-red">已拒绝</span>
+                        {% else %}
+                        <span class="badge badge-gray">{{ tx.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding:10px;">{{ tx.created_at }}</td>
+                    <td style="padding:10px;">
+                        {% if tx.blockchain_hash %}
+                        <span class="mono" style="font-size:11px;" title="{{ tx.blockchain_hash }}">{{ tx.blockchain_hash[:16] }}...</span>
+                        <button class="btn-copy" onclick="copyText('{{ tx.blockchain_hash }}')">复制</button>
+                        {% else %}
+                        <span style="color:var(--text-muted);">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <p>该教材暂无交易记录</p>
+        </div>
+        {% endif %}
+
+        <!-- 区块链溯源信息 -->
+        <h3 style="font-size:15px;font-weight:600;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);">⛓️ 区块链溯源（共 {{ search_result.related_blocks|length }} 个关联区块）</h3>
+        {% if search_result.related_blocks %}
+        {% for block in search_result.related_blocks %}
+        <div class="block-item" style="margin-bottom:12px;">
+            <h4>📦 区块 #{{ block.index }}</h4>
+            <div class="block-info">
+                <div><strong>区块哈希</strong> <span class="mono" style="font-size:11px;">{{ block.hash }}</span></div>
+                <div><strong>前区块哈希</strong> <span class="mono" style="font-size:11px;">{{ block.previous_hash }}</span></div>
+                <div><strong>时间戳</strong> {{ block.timestamp }}</div>
+                <div><strong>包含交易数</strong> {{ block.transactions|length }}</div>
+            </div>
+            {% if block.transactions %}
+            <ul class="tx-list" style="margin-top:10px;">
+                {% for tx in block.transactions %}
+                <li class="tx-item">
+                    <div class="tx-header">
+                        <span class="tx-type">🔗 链上交易</span>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-secondary);">
+                        <div><strong>哈希</strong> <span class="mono" style="font-size:10px;">{{ tx.hash if tx.hash is string else tx.get('hash', '-') }}</span></div>
+                        <div><strong>发送方</strong> <span class="mono" style="font-size:10px;">{{ tx.from if tx.from is string else tx.get('from', '-') }}</span></div>
+                        <div><strong>接收方</strong> <span class="mono" style="font-size:10px;">{{ tx.to if tx.to is string else tx.get('to', '-') }}</span></div>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">⛓️</div>
+            <p>未找到关联的区块链区块</p>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endif %}
+
+<!-- ===== 所有交易列表 ===== -->
 <div class="card">
     <div class="card-header">
         <h2>所有交易</h2>
         <span class="subtitle">共 {{ transactions|length }} 笔交易</span>
     </div>
     <div class="card-body">
+        {% if transactions %}
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
             <thead>
                 <tr style="border-bottom:2px solid var(--border);text-align:left;">
                     <th style="padding:10px;">交易ID</th>
+                    <th style="padding:10px;">教材ID</th>
                     <th style="padding:10px;">教材描述</th>
                     <th style="padding:10px;">买家</th>
                     <th style="padding:10px;">卖家</th>
@@ -26,6 +165,9 @@
                 {% for tx in transactions %}
                 <tr style="border-bottom:1px solid var(--border);">
                     <td style="padding:10px;" class="mono">{{ tx.transaction_id }}</td>
+                    <td style="padding:10px;" class="mono">
+                        <a href="{{ url_for('admin_transactions', textbook_id=tx.textbook_id) }}" title="查看该教材完整交易记录" style="color:var(--primary);text-decoration:none;">{{ tx.textbook_id }}</a>
+                    </td>
                     <td style="padding:10px;">{{ tx.textbook_description or '无描述' }}</td>
                     <td style="padding:10px;">
                         {{ tx.buyer_name or '未知买家' }}<br>
@@ -53,6 +195,12 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <p>暂无交易记录</p>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
