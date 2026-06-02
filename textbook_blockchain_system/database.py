@@ -437,6 +437,28 @@ class DatabaseManager:
         conn.close()
         return result
 
+    def get_other_pending_transaction_ids(self, textbook_id, accepted_transaction_id):
+        """获取同一教材下除已确认交易外所有 pending 状态的交易 ID 列表"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT transaction_id FROM transactions WHERE textbook_id = ? AND status = 'pending' AND transaction_id <> ?",
+            (textbook_id, accepted_transaction_id),
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        return [row[0] for row in rows]
+
+    def delete_transaction(self, transaction_id):
+        """删除指定交易记录（用于链上失败时回滚 DB）"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM transactions WHERE transaction_id = ?', (transaction_id,))
+        conn.commit()
+        result = cursor.rowcount > 0
+        conn.close()
+        return result
+
     def reject_other_pending_transactions(self, textbook_id, accepted_transaction_id):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()

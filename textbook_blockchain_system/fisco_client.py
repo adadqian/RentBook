@@ -123,12 +123,12 @@ class FiscoClient:
                 print(f"output字段: {result['output']}")
             raise Exception("部署合约失败，无法获取合约地址")
     
-    def register_textbook(self, textbook_id, isbn, version, condition, initial_price):
+    def register_textbook(self, textbook_id, isbn, version, condition, initial_price, off_chain_data_hash):
         """注册教材"""
         print(f"注册教材: {textbook_id}")
         func_name = "registerTextbook"
-        args = [textbook_id, isbn, version, condition, initial_price]
-        
+        args = [textbook_id, isbn, version, condition, initial_price, off_chain_data_hash]
+
         receipt = self.client.sendRawTransactionGetReceipt(self.contract_address, self.contract_abi, func_name, args)
         print(f"注册教材结果: {receipt}")
         return receipt
@@ -148,9 +148,19 @@ class FiscoClient:
         print(f"确认交易: {transaction_id}")
         func_name = "confirmTransaction"
         args = [transaction_id]
-        
+
         receipt = self.client.sendRawTransactionGetReceipt(self.contract_address, self.contract_abi, func_name, args)
         print(f"确认交易结果: {receipt}")
+        return receipt
+
+    def reject_transaction(self, transaction_id):
+        """拒绝交易"""
+        print(f"拒绝交易: {transaction_id}")
+        func_name = "rejectTransaction"
+        args = [transaction_id]
+
+        receipt = self.client.sendRawTransactionGetReceipt(self.contract_address, self.contract_abi, func_name, args)
+        print(f"拒绝交易结果: {receipt}")
         return receipt
     
     def get_textbook(self, textbook_id):

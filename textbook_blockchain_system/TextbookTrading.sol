@@ -8,6 +8,7 @@ contract TextbookTrading {
         string version;
         string condition;
         uint initialPrice;
+        string offChainDataHash;  // 链下辅助数据（照片、描述、地点等）的哈希摘要
         bool exists;
     }
     
@@ -17,7 +18,7 @@ contract TextbookTrading {
         string textbookId;
         address buyer;
         uint offerPrice;
-        string status; // pending, completed
+        string status; // pending, completed, rejected
         uint timestamp;
         bool exists;
     }
@@ -26,6 +27,7 @@ contract TextbookTrading {
     event TextbookRegistered(string textbookId, string isbn, string version);
     event TransactionInitiated(string transactionId, string textbookId, address buyer, uint offerPrice);
     event TransactionConfirmed(string transactionId, string textbookId);
+    event TransactionRejected(string transactionId, string textbookId);
     
     // 存储映射
     mapping(string => Textbook) private textbooks;
@@ -38,20 +40,22 @@ contract TextbookTrading {
         string isbn,
         string version,
         string condition,
-        uint initialPrice
+        uint initialPrice,
+        string offChainDataHash
     ) public {
         require(!textbooks[textbookId].exists, "Textbook already exists");
-        
+
         Textbook memory newTextbook;
         newTextbook.textbookId = textbookId;
         newTextbook.isbn = isbn;
         newTextbook.version = version;
         newTextbook.condition = condition;
         newTextbook.initialPrice = initialPrice;
+        newTextbook.offChainDataHash = offChainDataHash;
         newTextbook.exists = true;
-        
+
         textbooks[textbookId] = newTextbook;
-        
+
         emit TextbookRegistered(textbookId, isbn, version);
     }
     
@@ -83,11 +87,22 @@ contract TextbookTrading {
     function confirmTransaction(string transactionId) public {
         require(transactions[transactionId].exists, "Transaction does not exist");
         require(keccak256(abi.encodePacked(transactions[transactionId].status)) == keccak256(abi.encodePacked("pending")), "Transaction is not in pending state");
-        
+
         transactions[transactionId].status = "completed";
         transactions[transactionId].timestamp = block.timestamp;
-        
+
         emit TransactionConfirmed(transactionId, transactions[transactionId].textbookId);
+    }
+
+    // 拒绝交易
+    function rejectTransaction(string transactionId) public {
+        require(transactions[transactionId].exists, "Transaction does not exist");
+        require(keccak256(abi.encodePacked(transactions[transactionId].status)) == keccak256(abi.encodePacked("pending")), "Transaction is not in pending state");
+
+        transactions[transactionId].status = "rejected";
+        transactions[transactionId].timestamp = block.timestamp;
+
+        emit TransactionRejected(transactionId, transactions[transactionId].textbookId);
     }
     
     // 获取教材信息

@@ -1,5 +1,7 @@
 from datetime import datetime
 import hashlib
+import sqlite3
+import time
 
 from database import DatabaseManager
 from fisco_client import fisco_client
@@ -137,16 +139,36 @@ class TextbookTransaction:
         except (OSError, OverflowError, ValueError):
             return datetime.now().isoformat()
 
-    def add_textbook(self, isbn, version, condition, initial_price):
+    def _db_update_with_retry(self, func, max_retries=3, delay=0.5):
+        """对 DB 写入操作做重试，应对 SQLite 瞬态锁超时等错误"""
+        for attempt in range(max_retries):
+            try:
+                result = func()
+                if result:
+                    return True
+            except sqlite3.OperationalError:
+                if attempt < max_retries - 1:
+                    time.sleep(delay)
+                    continue
+                raise
+        return False
+
+    def add_textbook(self, isbn, version, condition, initial_price, description="", photos="", location=""):
         self._ensure_chain_available()
 
         textbook_id = self.generate_textbook_id(isbn, version)
+
+        # 计算链下辅助数据（描述、照片文件名、交易地点）的哈希摘要，锚定到链上
+        off_chain_data = f"{description}|{photos}|{location}"
+        off_chain_data_hash = hashlib.sha256(off_chain_data.encode()).hexdigest()
+
         receipt = fisco_client.register_textbook(
             textbook_id=textbook_id,
             isbn=isbn,
             version=version,
             condition=condition,
             initial_price=int(initial_price * 100),
+            off_chain_data_hash=off_chain_data_hash,
         )
 
         if not self._receipt_successful(receipt):
@@ -157,10 +179,28 @@ class TextbookTransaction:
     def initiate_transaction(self, textbook_id, buyer_id, offer_price):
         self._ensure_chain_available()
 
+        # 防止卖家自购（防御性校验）
+        metadata = self.db_manager.get_textbook_metadata(textbook_id)
+        if metadata and metadata.get('seller_id') == buyer_id:
+            raise ValueError("不能购买自己发布的教材。")
+
         transaction_id = hashlib.sha256(
             f"{textbook_id}_{buyer_id}_{datetime.now().timestamp()}".encode()
         ).hexdigest()[:16]
 
+        # Step 1: 先写入 DB（provisional 状态），确保 DB 成功后再上链
+        success = self.db_manager.add_transaction(
+            transaction_id=transaction_id,
+            textbook_id=textbook_id,
+            buyer_id=buyer_id,
+            offer_price=offer_price,
+            status="pending",
+            blockchain_hash="pending",
+        )
+        if not success:
+            raise RuntimeError("链下交易记录写入失败。")
+
+        # Step 2: 链上操作
         receipt = fisco_client.initiate_transaction(
             transaction_id=transaction_id,
             textbook_id=textbook_id,
@@ -168,22 +208,20 @@ class TextbookTransaction:
         )
 
         if not self._receipt_successful(receipt):
+            # 链失败 → 回滚 DB 记录
+            self.db_manager.delete_transaction(transaction_id)
             raise RuntimeError("交易发起失败，链上未确认。")
 
         blockchain_hash = self._extract_transaction_hash(receipt)
         if not blockchain_hash:
+            # 拿不到 hash → 回滚 DB 记录
+            self.db_manager.delete_transaction(transaction_id)
             raise RuntimeError("交易已提交，但未获取到链上交易哈希。")
 
-        success = self.db_manager.add_transaction(
-            transaction_id=transaction_id,
-            textbook_id=textbook_id,
-            buyer_id=buyer_id,
-            offer_price=offer_price,
-            status="pending",
-            blockchain_hash=blockchain_hash,
+        # Step 3: 更新 DB 中的真实 blockchain_hash
+        self._db_update_with_retry(
+            lambda: self.db_manager.update_transaction(transaction_id, blockchain_hash=blockchain_hash),
         )
-        if not success:
-            raise RuntimeError("链下交易记录写入失败。")
 
         return {
             "transaction_id": transaction_id,
@@ -215,9 +253,29 @@ class TextbookTransaction:
         if blockchain_hash:
             update_data["blockchain_hash"] = blockchain_hash
 
-        success = self.db_manager.update_transaction(transaction_id, **update_data)
-        if not success:
-            raise RuntimeError("链下交易状态更新失败。")
+        # 链上已确认（不可逆），DB 更新加重试防止瞬态错误导致链/库不一致
+        db_success = self._db_update_with_retry(
+            lambda: self.db_manager.update_transaction(transaction_id, **update_data),
+        )
+        if not db_success:
+            chain_info = f"链上已确认(hash={blockchain_hash or 'unknown'})，但本地DB更新失败。请手动修复 transaction_id={transaction_id}"
+            print(f"链/库不一致: {chain_info}")
+            raise RuntimeError(chain_info)
+
+        # 对同一教材的其他 pending 交易，先逐个上链拒绝，再批量更新 SQLite
+        other_pending_ids = self.db_manager.get_other_pending_transaction_ids(
+            textbook_id=textbook_id,
+            accepted_transaction_id=transaction_id,
+        )
+        for tx_id in other_pending_ids:
+            try:
+                receipt = fisco_client.reject_transaction(tx_id)
+                if self._receipt_successful(receipt):
+                    chain_hash = self._extract_transaction_hash(receipt)
+                    if chain_hash:
+                        self.db_manager.update_transaction(tx_id, status="rejected", blockchain_hash=chain_hash)
+            except Exception as e:
+                print(f"链上拒绝交易 {tx_id} 失败（将在SQLite中标记为rejected）: {e}")
 
         self.db_manager.reject_other_pending_transactions(
             textbook_id=textbook_id,
@@ -233,6 +291,8 @@ class TextbookTransaction:
         }
 
     def reject_transaction(self, textbook_id, transaction_id):
+        self._ensure_chain_available()
+
         db_tx = self.db_manager.get_transaction(transaction_id)
         if not db_tx:
             raise ValueError("交易不存在。")
@@ -241,15 +301,31 @@ class TextbookTransaction:
         if db_tx["status"] != "pending":
             raise ValueError("只有待确认的交易才能拒绝。")
 
-        success = self.db_manager.update_transaction(transaction_id, status="rejected")
-        if not success:
-            raise RuntimeError("链下交易状态更新失败。")
+        # 先链上：调用智能合约拒绝交易
+        receipt = fisco_client.reject_transaction(transaction_id)
+        if not self._receipt_successful(receipt):
+            raise RuntimeError("链上拒绝失败，交易状态未更新。")
+
+        blockchain_hash = self._extract_transaction_hash(receipt)
+
+        # 后链下：更新SQLite状态（加重试防止瞬态错误）
+        update_data = {"status": "rejected"}
+        if blockchain_hash:
+            update_data["blockchain_hash"] = blockchain_hash
+
+        db_success = self._db_update_with_retry(
+            lambda: self.db_manager.update_transaction(transaction_id, **update_data),
+        )
+        if not db_success:
+            chain_info = f"链上已拒绝(hash={blockchain_hash or 'unknown'})，但本地DB更新失败。请手动修复 transaction_id={transaction_id}"
+            print(f"链/库不一致: {chain_info}")
+            raise RuntimeError(chain_info)
 
         return {
             "transaction_id": transaction_id,
             "textbook_id": textbook_id,
             "status": "rejected",
-            "blockchain_hash": db_tx.get("blockchain_hash"),
+            "blockchain_hash": blockchain_hash or db_tx.get("blockchain_hash"),
             "timestamp": datetime.now().isoformat(),
         }
 

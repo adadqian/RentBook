@@ -169,9 +169,12 @@ def register_textbook():
 
         seller_id = session['user_id']
 
-        # 教材信息上链
+        # 教材信息上链（传入链下辅助数据用于计算哈希锚定）
         try:
-            textbook_id = transaction_system.add_textbook(isbn, version, condition, initial_price)
+            textbook_id = transaction_system.add_textbook(
+                isbn, version, condition, initial_price,
+                description=description, photos=photos_str, location=location,
+            )
         except RuntimeError as e:
             return render_error(str(e), 503)
         except Exception as e:
@@ -206,6 +209,13 @@ def initiate_transaction():
             return render_error('报价必须是有效数字', 400)
 
         buyer_id = session['user_id']
+
+        # 防止卖家自购
+        metadata = db_manager.get_textbook_metadata(textbook_id)
+        if not metadata:
+            return render_error('教材不存在', 404)
+        if metadata.get('seller_id') == buyer_id:
+            return render_error('不能购买自己发布的教材', 400)
 
         # 发起交易
         try:
@@ -585,7 +595,24 @@ def blockchain_status():
                                 'offer_price': db_tx['offer_price'] if db_tx else 0,
                                 'status': db_tx['status'] if db_tx else 'completed',
                             })
-                        elif func_name == 'registerTextbook' and args and len(args) >= 5:
+                        elif func_name == 'rejectTransaction' and args and len(args) >= 1:
+                            transaction_id = args[0]
+                            db_tx = db_manager.get_transaction(transaction_id)
+                            textbook_id = db_tx['textbook_id'] if db_tx else ''
+                            buyer_id = db_tx['buyer_id'] if db_tx else ''
+                            seller_id = textbook_sellers.get(textbook_id, '')
+                            tx_info.update({
+                                'type': '交易拒绝',
+                                'textbook_id': textbook_id,
+                                'textbook_description': textbooks.get(textbook_id, ''),
+                                'buyer_id': buyer_id,
+                                'buyer_name': users.get(buyer_id, '未知买家') if buyer_id else '未知买家',
+                                'seller_id': seller_id,
+                                'seller_name': users.get(seller_id, '未知卖家') if seller_id else '未知卖家',
+                                'offer_price': db_tx['offer_price'] if db_tx else 0,
+                                'status': db_tx['status'] if db_tx else 'rejected',
+                            })
+                        elif func_name == 'registerTextbook' and args and len(args) >= 6:
                             textbook_id = args[0]
                             seller_id = textbook_sellers.get(textbook_id, '')
                             tx_info.update({
