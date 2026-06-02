@@ -5,6 +5,7 @@ from functools import wraps
 
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory, session
 from markupsafe import escape
+from werkzeug.utils import secure_filename
 from textbook import TextbookTransaction
 from database import DatabaseManager
 import hashlib
@@ -43,11 +44,27 @@ def generate_user_id(name):
     return hashlib.sha256(data.encode()).hexdigest()[:12]
 
 
+def _safe_next_path(next_path):
+    """验证 next 参数只允许相对路径，防止开放重定向"""
+    if next_path and (not next_path.startswith('/') or '://' in next_path):
+        return ''
+    return next_path
+
+
 def login_required(view_func):
     @wraps(view_func)
     def wrapper(*args, **kwargs):
-        if not session.get('user_id'):
-            return redirect(url_for('login', next=request.path))
+        user_id = session.get('user_id')
+        if not user_id:
+            return redirect(url_for('login', next=_safe_next_path(request.args.get('next', ''))))
+        # 检查用户是否被封禁或仍在审核中
+        user = db_manager.get_user(user_id)
+        if not user or user.get('status') == 'banned':
+            session.clear()
+            return redirect(url_for('login'))
+        if user.get('status') == 'pending':
+            session.clear()
+            return render_error('您的账号正在审核中，请等待管理员审批', 403)
         return view_func(*args, **kwargs)
 
     return wrapper
@@ -58,9 +75,15 @@ def admin_required(view_func):
     def wrapper(*args, **kwargs):
         user_id = session.get('user_id')
         if not user_id:
-            return redirect(url_for('login', next=request.path))
+            return redirect(url_for('login', next=_safe_next_path(request.args.get('next', ''))))
         user = db_manager.get_user(user_id)
-        if not user or user.get('role') != 'admin':
+        if not user or user.get('status') == 'banned':
+            session.clear()
+            return redirect(url_for('login'))
+        if user.get('status') == 'pending':
+            session.clear()
+            return render_error('您的账号正在审核中', 403)
+        if user.get('role') != 'admin':
             return render_error('您没有管理员权限', 403)
         return view_func(*args, **kwargs)
 
@@ -84,37 +107,51 @@ def _validate_csrf():
     return None
 
 
+def csrf_required(view_func):
+    """对所有 POST 请求强制校验 CSRF token"""
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if request.method == 'POST':
+            csrf_error = _validate_csrf()
+            if csrf_error:
+                return csrf_error
+        return view_func(*args, **kwargs)
+    return wrapper
+
+
 @app.before_request
 def before_request():
     _ensure_csrf_token()
+
+
+@app.context_processor
+def inject_csrf_token():
+    return {'csrf_token': session.get('csrf_token', '')}
 
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-import os
-from werkzeug.utils import secure_filename
-
-# 确保上传目录存在
-UPLOAD_FOLDER = 'uploads'
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit
-
 @app.route('/textbook/register', methods=['GET', 'POST'])
 @login_required
+@csrf_required
 def register_textbook():
     if request.method == 'POST':
-        isbn = request.form['isbn']
-        version = request.form['version']
-        condition = request.form['condition']
-        initial_price = float(request.form['initial_price'])
-        description = request.form['description']
-        location = request.form['location']
-        
+        isbn = request.form.get('isbn', '').strip()
+        version = request.form.get('version', '').strip()
+        condition = request.form.get('condition', '').strip()
+        description = request.form.get('description', '').strip()
+        location = request.form.get('location', '').strip()
+
+        try:
+            initial_price = float(request.form.get('initial_price', '0'))
+        except (ValueError, TypeError):
+            return render_error('价格必须是有效数字', 400)
+
+        if not isbn or not version or not condition:
+            return render_error('请填写完整的教材信息', 400)
+
         # 处理文件上传
         photos = []
         if 'photos' in request.files:
@@ -127,37 +164,58 @@ def register_textbook():
                     file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
                     file.save(file_path)
                     photos.append(unique_filename)
-        
+
         photos_str = ','.join(photos) if photos else ''
-        
+
         seller_id = session['user_id']
-        
+
         # 教材信息上链
-        textbook_id = transaction_system.add_textbook(isbn, version, condition, initial_price)
-        
+        try:
+            textbook_id = transaction_system.add_textbook(isbn, version, condition, initial_price)
+        except RuntimeError as e:
+            return render_error(str(e), 503)
+        except Exception as e:
+            return render_error(f'教材注册失败：{e}', 500)
+
         # 添加教材辅助信息
-        db_manager.add_textbook_metadata(
+        ok = db_manager.add_textbook_metadata(
             textbook_id=textbook_id,
             photos=photos_str,
             description=description,
             seller_id=seller_id,
             location=location
         )
+        if not ok:
+            return render_error('教材本地信息保存失败，请重试', 500)
         
         return redirect(url_for('textbook_detail', textbook_id=textbook_id))
     return render_template('register_textbook.html')
 
 @app.route('/transaction/initiate', methods=['GET', 'POST'])
 @login_required
+@csrf_required
 def initiate_transaction():
     if request.method == 'POST':
-        textbook_id = request.form['textbook_id']
-        offer_price = float(request.form['offer_price'])
+        textbook_id = request.form.get('textbook_id', '').strip()
+        if not textbook_id:
+            return render_error('教材编号不能为空', 400)
+
+        try:
+            offer_price = float(request.form.get('offer_price', '0'))
+        except (ValueError, TypeError):
+            return render_error('报价必须是有效数字', 400)
 
         buyer_id = session['user_id']
-        
+
         # 发起交易
-        transaction = transaction_system.initiate_transaction(textbook_id, buyer_id, offer_price)
+        try:
+            transaction = transaction_system.initiate_transaction(textbook_id, buyer_id, offer_price)
+        except RuntimeError as e:
+            return render_error(str(e), 503)
+        except ValueError as e:
+            return render_error(str(e), 400)
+        except Exception as e:
+            return render_error(f'交易发起失败：{e}', 500)
         
         # 跳转到教材详情页面，显示交易ID
         return redirect(url_for('textbook_detail', textbook_id=textbook_id))
@@ -165,10 +223,14 @@ def initiate_transaction():
 
 @app.route('/transaction/confirm', methods=['GET', 'POST'])
 @login_required
+@csrf_required
 def confirm_transaction():
     if request.method == 'POST':
-        textbook_id = request.form['textbook_id']
-        transaction_id = request.form['transaction_id']
+        textbook_id = request.form.get('textbook_id', '').strip()
+        transaction_id = request.form.get('transaction_id', '').strip()
+
+        if not textbook_id or not transaction_id:
+            return render_error('参数缺失', 400)
 
         metadata = db_manager.get_textbook_metadata(textbook_id)
         if not metadata:
@@ -176,7 +238,14 @@ def confirm_transaction():
         if metadata.get('seller_id') != session.get('user_id'):
             return render_error('只有卖家才能确认交易', 403)
 
-        transaction_system.confirm_transaction(textbook_id, transaction_id)
+        try:
+            transaction_system.confirm_transaction(textbook_id, transaction_id)
+        except ValueError as e:
+            return render_error(str(e), 400)
+        except RuntimeError as e:
+            return render_error(str(e), 503)
+        except Exception as e:
+            return render_error(f'确认交易失败：{e}', 500)
         
         # 跳转到教材详情页面，显示交易状态
         return redirect(url_for('textbook_detail', textbook_id=textbook_id))
@@ -185,6 +254,7 @@ def confirm_transaction():
 
 @app.route('/transaction/reject', methods=['POST'])
 @login_required
+@csrf_required
 def reject_transaction():
     textbook_id = request.form.get('textbook_id', '').strip()
     transaction_id = request.form.get('transaction_id', '').strip()
@@ -222,6 +292,7 @@ def textbook_detail(textbook_id):
 
 
 @app.route('/auth/register', methods=['GET', 'POST'])
+@csrf_required
 def register():
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
@@ -244,6 +315,7 @@ def register():
 
 
 @app.route('/auth/login', methods=['GET', 'POST'])
+@csrf_required
 def login():
     if request.method == 'POST':
         email = request.form.get('email', '').strip()
@@ -262,13 +334,14 @@ def login():
         session['user_name'] = user['name']
         session['user_role'] = user['role']
 
-        next_path = request.args.get('next')
+        next_path = _safe_next_path(request.args.get('next', ''))
         return redirect(next_path or url_for('dashboard'))
 
     return render_template('auth_login.html')
 
 
-@app.route('/auth/logout')
+@app.route('/auth/logout', methods=['POST'])
+@csrf_required
 def logout():
     session.clear()
     return redirect(url_for('index'))
@@ -313,10 +386,8 @@ def admin_users():
 
 @app.route('/admin/user/<user_id>/status', methods=['POST'])
 @admin_required
+@csrf_required
 def admin_user_status(user_id):
-    csrf_error = _validate_csrf()
-    if csrf_error:
-        return csrf_error
 
     status = request.form.get('status')
     if status not in ('active', 'banned', 'pending'):
@@ -335,10 +406,8 @@ def admin_user_status(user_id):
 
 @app.route('/admin/user/<user_id>/role', methods=['POST'])
 @admin_required
+@csrf_required
 def admin_user_role(user_id):
-    csrf_error = _validate_csrf()
-    if csrf_error:
-        return csrf_error
 
     role = request.form.get('role')
     if role not in ('user', 'admin'):
@@ -395,23 +464,8 @@ def dashboard():
         buyer_transactions=buyer_transactions,
     )
 
-@app.route('/transaction/<textbook_id>')
-def transaction_detail(textbook_id):
-    # 获取教材交易历史
-    history = transaction_system.get_textbook_history(textbook_id)
-    
-    # 获取教材完整信息
-    combined_info = db_manager.get_combined_textbook_info(textbook_id, history)
-    
-    return render_template('textbook_detail.html', 
-                         textbook_id=textbook_id, 
-                         history=history, 
-                         combined_info=combined_info)
-
 @app.route('/blockchain/status')
 def blockchain_status():
-    from datetime import datetime
-    import sqlite3
     from fisco_client import fisco_client
 
     chain = []
@@ -422,18 +476,13 @@ def blockchain_status():
     textbooks = {}
     textbook_sellers = {}
 
-    conn = sqlite3.connect('textbook_trade.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT user_id, name FROM users')
-    for user_id, name in cursor.fetchall():
-        users[user_id] = name
+    for u in db_manager.get_all_users():
+        users[u['user_id']] = u['name']
 
-    cursor.execute('SELECT textbook_id, description, seller_id FROM textbook_metadata')
-    for textbook_id, description, seller_id in cursor.fetchall():
-        textbooks[textbook_id] = description or '无描述'
-        if seller_id:
-            textbook_sellers[textbook_id] = seller_id
-    conn.close()
+    for m in db_manager.get_all_textbook_metadata():
+        textbooks[m['textbook_id']] = m.get('description') or '无描述'
+        if m.get('seller_id'):
+            textbook_sellers[m['textbook_id']] = m['seller_id']
 
     page_size = 5
     try:
@@ -618,9 +667,12 @@ def blockchain_status():
     )
 
 @app.route('/textbook/search', methods=['GET', 'POST'])
+@csrf_required
 def search_textbook():
     if request.method == 'POST':
-        textbook_id = request.form['textbook_id']
+        textbook_id = request.form.get('textbook_id', '').strip()
+        if not textbook_id:
+            return render_error('教材编号不能为空', 400)
         # 获取教材交易历史
         history = transaction_system.get_textbook_history(textbook_id)
         # 获取教材完整信息
@@ -710,224 +762,6 @@ def marketplace():
     textbooks = db_manager.get_available_textbooks(keyword if keyword else None)
     return render_template('marketplace.html', textbooks=textbooks, keyword=keyword)
 
-
-def _register_textbook_v2():
-    if request.method != 'POST':
-        return render_template('register_textbook.html')
-
-    try:
-        isbn = request.form['isbn']
-        version = request.form['version']
-        condition = request.form['condition']
-        initial_price = float(request.form['initial_price'])
-        description = request.form['description']
-        seller_name = request.form['seller_name']
-        seller_contact = request.form['seller_contact']
-        seller_email = request.form['seller_email']
-        location = request.form['location']
-
-        photos = []
-        if 'photos' in request.files:
-            for file in request.files.getlist('photos'):
-                if file and file.filename:
-                    filename = secure_filename(file.filename)
-                    unique_filename = f"{datetime.now().timestamp()}_{filename}"
-                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
-                    file.save(file_path)
-                    photos.append(unique_filename)
-
-        seller_id = generate_user_id(seller_name)
-        textbook_id = transaction_system.add_textbook(
-            isbn, version, condition, initial_price
-        )
-
-        db_manager.add_user(seller_id, seller_name, seller_contact, seller_email)
-        db_manager.add_textbook_metadata(
-            textbook_id=textbook_id,
-            photos=','.join(photos),
-            description=description,
-            seller_id=seller_id,
-            location=location
-        )
-        return redirect(url_for('textbook_detail', textbook_id=textbook_id))
-    except Exception as e:
-        return render_error(f"教材登记失败：{e}", 500)
-
-
-def _initiate_transaction_v2():
-    if request.method != 'POST':
-        return render_template('initiate_transaction.html')
-
-    try:
-        textbook_id = request.form['textbook_id']
-        buyer_name = request.form['buyer_name']
-        buyer_contact = request.form['buyer_contact']
-        buyer_email = request.form['buyer_email']
-        offer_price = float(request.form['offer_price'])
-
-        buyer_id = generate_user_id(buyer_name)
-        db_manager.add_user(buyer_id, buyer_name, buyer_contact, buyer_email)
-        transaction_system.initiate_transaction(textbook_id, buyer_id, offer_price)
-        return redirect(url_for('textbook_detail', textbook_id=textbook_id))
-    except Exception as e:
-        return render_error(f"交易发起失败：{e}", 500)
-
-
-def _confirm_transaction_v2():
-    if request.method != 'POST':
-        return render_template('confirm_transaction.html')
-
-    try:
-        textbook_id = request.form['textbook_id']
-        transaction_id = request.form['transaction_id']
-        transaction_system.confirm_transaction(textbook_id, transaction_id)
-        return redirect(url_for('textbook_detail', textbook_id=textbook_id))
-    except ValueError as e:
-        return render_error(f"交易确认失败：{e}", 400)
-    except Exception as e:
-        return render_error(f"交易确认失败：{e}", 500)
-
-
-def _blockchain_status_v2():
-    from fisco_client import fisco_client
-
-    chain = []
-    chain_length = 0
-    is_valid = True
-    all_transactions = db_manager.get_all_transactions()
-
-    users = {}
-    for tx in all_transactions:
-        buyer_id = tx.get('buyer_id')
-        if buyer_id and buyer_id not in users:
-            user = db_manager.get_user(buyer_id)
-            if user:
-                users[buyer_id] = user['name']
-
-    textbook_meta = {}
-    textbook_sellers = {}
-    for tx in all_transactions:
-        textbook_id = tx.get('textbook_id')
-        if textbook_id and textbook_id not in textbook_meta:
-            metadata = db_manager.get_textbook_metadata(textbook_id)
-            if metadata:
-                textbook_meta[textbook_id] = metadata.get('description') or ''
-                if metadata.get('seller_id'):
-                    textbook_sellers[textbook_id] = metadata['seller_id']
-                    seller = db_manager.get_user(metadata['seller_id'])
-                    if seller:
-                        users[metadata['seller_id']] = seller['name']
-
-    tx_by_hash = {
-        tx['blockchain_hash']: tx
-        for tx in all_transactions
-        if tx.get('blockchain_hash')
-    }
-
-    if fisco_client and fisco_client.is_available():
-        try:
-            chain_length = fisco_client.client.getBlockNumber()
-            for i in range(max(0, chain_length - 5), chain_length):
-                block = fisco_client.client.getBlockByNumber(i, True)
-                if not block:
-                    continue
-
-                timestamp_hex = block.get('timestamp', '0')
-                try:
-                    readable_time = datetime.fromtimestamp(
-                        int(timestamp_hex, 16)
-                    ).strftime('%Y-%m-%d %H:%M:%S')
-                except Exception:
-                    readable_time = str(timestamp_hex)
-
-                block_info = {
-                    'index': i,
-                    'timestamp': readable_time,
-                    'previous_hash': block.get('parentHash', ''),
-                    'hash': block.get('hash', ''),
-                    'transactions': []
-                }
-
-                for tx in block.get('transactions', []):
-                    tx_hash = tx.get('hash', '')
-                    business_tx = tx_by_hash.get(tx_hash)
-                    tx_info = {
-                        'type': '交易',
-                        'hash': tx_hash,
-                        'from': tx.get('from', ''),
-                        'to': tx.get('to', ''),
-                        'value': tx.get('value', '0')
-                    }
-
-                    if business_tx:
-                        textbook_id = business_tx.get('textbook_id', '')
-                        seller_id = textbook_sellers.get(textbook_id, '')
-                        tx_info.update({
-                            'textbook_id': textbook_id,
-                            'textbook_description': textbook_meta.get(textbook_id, ''),
-                            'buyer_id': business_tx.get('buyer_id', ''),
-                            'buyer_name': users.get(business_tx.get('buyer_id', ''), '未知买家'),
-                            'seller_id': seller_id,
-                            'seller_name': users.get(seller_id, '未知卖家'),
-                            'offer_price': business_tx.get('offer_price', 0),
-                            'status': business_tx.get('status', '')
-                        })
-                    else:
-                        tx_info.update({
-                            'textbook_description': '未知教材',
-                            'buyer_id': '',
-                            'buyer_name': '未知买家',
-                            'seller_id': '',
-                            'seller_name': '未知卖家',
-                            'offer_price': 0,
-                            'status': 'unknown'
-                        })
-
-                    block_info['transactions'].append(tx_info)
-
-                chain.append(block_info)
-        except Exception as e:
-            print(f"获取区块链状态失败: {e}")
-
-    if not chain:
-        fallback_block = {
-            'index': 0,
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'previous_hash': '0x0000000000000000000000000000000000000000',
-            'hash': '0x0000000000000000000000000000000000000000',
-            'transactions': []
-        }
-        for tx in all_transactions:
-            textbook_id = tx.get('textbook_id', '')
-            seller_id = textbook_sellers.get(textbook_id, '')
-            fallback_block['transactions'].append({
-                'type': '交易',
-                'hash': tx.get('blockchain_hash', ''),
-                'from': '',
-                'to': '',
-                'value': '0',
-                'textbook_id': textbook_id,
-                'textbook_description': textbook_meta.get(textbook_id, ''),
-                'buyer_id': tx.get('buyer_id', ''),
-                'buyer_name': users.get(tx.get('buyer_id', ''), '未知买家'),
-                'seller_id': seller_id,
-                'seller_name': users.get(seller_id, '未知卖家'),
-                'offer_price': tx.get('offer_price', 0),
-                'status': tx.get('status', '')
-            })
-
-        chain = [fallback_block]
-        chain_length = len(chain)
-
-    return render_template(
-        'blockchain_status.html',
-        chain=chain,
-        is_valid=is_valid,
-        chain_length=chain_length
-    )
-
-
-# 回退到初始版路由实现，不覆盖原始视图函数。
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

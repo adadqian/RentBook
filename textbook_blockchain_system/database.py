@@ -689,3 +689,16 @@ class DatabaseManager:
                 'seller_email': row[8],
             })
         return result
+
+    def get_all_textbook_metadata(self):
+        """获取所有教材辅助信息"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT textbook_id, photos, description, seller_id, location, created_at FROM textbook_metadata'
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [{'textbook_id': r[0], 'photos': r[1], 'description': r[2],
+                 'seller_id': r[3], 'location': r[4], 'created_at': r[5]} for r in rows]

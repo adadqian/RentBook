@@ -10,6 +10,7 @@
         </div>
         <div class="card-body">
             <form method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <div class="form-section">📚 教材基本信息</div>
                 <div class="form-row">
                     <div class="form-group">

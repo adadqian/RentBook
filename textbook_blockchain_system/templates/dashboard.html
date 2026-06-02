@@ -99,11 +99,13 @@
                         <div class="item-meta">状态：<span class="badge badge-yellow">{{ tx.status }}</span></div>
                         <div class="item-actions">
                             <form method="POST" action="/transaction/confirm" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="textbook_id" value="{{ tx.textbook_id }}">
                                 <input type="hidden" name="transaction_id" value="{{ tx.transaction_id }}">
                                 <button class="btn btn-success btn-sm" type="submit">✅ 确认交易</button>
                             </form>
                             <form method="POST" action="/transaction/reject" style="display:inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="textbook_id" value="{{ tx.textbook_id }}">
                                 <input type="hidden" name="transaction_id" value="{{ tx.transaction_id }}">
                                 <button class="btn btn-danger btn-sm" type="submit">✕ 拒绝</button>

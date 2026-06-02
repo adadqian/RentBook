@@ -14,6 +14,7 @@
             </div>
 
             <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <div class="form-group">
                     <label for="textbook_id">教材ID</label>
                     <input type="text" id="textbook_id" name="textbook_id" class="form-control" required placeholder="请输入教材ID">
